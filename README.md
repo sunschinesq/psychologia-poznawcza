@@ -1,1 +1,39 @@
-# psychologia-poznawcza
+# Psychologia poznawcza – aplikacja do nauki
+
+Prosta aplikacja webowa do nauki na egzamin warunkowy (czw 17.12.2026). Działa w Safari na iPadzie, a po pierwszym otwarciu także offline.
+
+## Co jest w środku
+
+- **Dziś**: zadania z planu na bieżący dzień (3 bloki po 25 min), odhaczanie, minutnik 25 + 5 min, zaległości i postęp.
+- **Plan**: wszystkie 45 dni nauki (26.10–17.12) w podziale na 3 etapy.
+- **Notatki**: 72 zagadnienia w 8 działach, z kolorami jak w PDF (czerwone = definicje, żółte = przykłady i badania, zielone = porównania, szare = dopiski). Do tego wyszukiwarka, gwiazdka „słabe pytanie”, przycisk „zasłoń” do odpytywania się, ściąga, pytania kontrolne i tabele do odtwarzania z pamięci.
+- **Fiszki**: 106 fiszek „termin → definicja” z pogrubionych pojęć, quiz ABCD i 72 pytania egzaminacyjne. Fiszki układają się w pudełka Leitnera.
+- **Egzamin**: losowanie 3 pytań z wybranego zakresu, 15 min na pytanie, pisanie odpowiedzi, a potem porównanie z notatką i lista kluczowych terminów, których zabrakło. Pytania ocenione na „średnio” albo „słabo” trafiają na listę słabych pytań.
+
+## Jak otworzyć na iPadzie
+
+1. Repozytorium na GitHubie → **Settings → Pages**.
+2. W „Build and deployment” wybierz **Deploy from a branch**, potem gałąź z aplikacją i folder **/ (root)**, a na koniec **Save**.
+3. Po 1–2 minutach na górze tej strony pojawi się adres, np. `https://<login>.github.io/psychologia-poznawcza/`.
+4. Otwórz go w Safari i stuknij **Udostępnij → Do ekranu początkowego**. Aplikacja otworzy się wtedy na pełnym ekranie, z własną ikoną.
+
+> GitHub Pages dla repozytorium **prywatnego** wymaga konta GitHub Pro. Studenci dostają je za darmo w GitHub Student Developer Pack. Drugie wyjście: ustawić repozytorium jako publiczne.
+
+## Gdzie zapisuje się postęp
+
+Postęp zapisuje się **tylko na tym urządzeniu**, w pamięci przeglądarki: odhaczone bloki, fiszki, słabe pytania i historia egzaminów.
+
+- Ikona na ekranie początkowym i zwykła karta Safari mają **osobną** pamięć, więc najlepiej używać zawsze tej samej (ikony).
+- W zakładce **Plan → Kopia postępu** możesz zapisać kopię do aplikacji Pliki i potem ją wczytać, np. na innym urządzeniu.
+
+## Aktualizacja danych z PDF
+
+Pliki `data.js` są generowane z PDF-ów (notatka + plan nauki) skryptami z folderu `tools/`. Wymagają Pythona i biblioteki `pdfplumber`:
+
+```sh
+pdftotext -layout Plan_nauki_psychologia_poznawcza.pdf plan.txt
+python3 tools/parse.py Psychologia_poznawcza_notatka.pdf notes.json
+python3 tools/build.py notes.json plan.txt data.js
+```
+
+Po zmianie plików podbij `VERSION` w `sw.js`, żeby iPad pobrał nową wersję.

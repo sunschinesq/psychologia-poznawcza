@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Poznawcza – nauka</title>
+  <meta name="description" content="Plan nauki, notatki, fiszki i próbne egzaminy z psychologii poznawczej.">
+  <meta name="theme-color" content="#1a3c5e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Poznawcza">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/dzis">Ψ <span>Poznawcza</span></a>
+    <div class="countdown" id="countdown"></div>
+  </header>
+
+  <main id="view" tabindex="-1"></main>
+
+  <div class="timer-pill" id="timer" hidden></div>
+
+  <nav class="tabbar" aria-label="Nawigacja">
+    <a href="#/dzis" data-tab="dzis"><span class="ico">☀︎</span>Dziś</a>
+    <a href="#/plan" data-tab="plan"><span class="ico">▦</span>Plan</a>
+    <a href="#/notatki" data-tab="notatki"><span class="ico">≣</span>Notatki</a>
+    <a href="#/fiszki" data-tab="fiszki"><span class="ico">◧</span>Fiszki</a>
+    <a href="#/egzamin" data-tab="egzamin"><span class="ico">✎</span>Egzamin</a>
+  </nav>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
