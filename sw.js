@@ -1,5 +1,5 @@
 // Pamięć podręczna do pracy offline. Zmień VERSION przy każdej aktualizacji plików.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'data.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

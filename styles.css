@@ -317,3 +317,15 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 
 .tile { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; text-align: left; height: auto; margin: 0; gap: 2px; }
 .tile .stat { margin-bottom: 4px; }
+
+/* ---------- lista „co musisz napisać” ---------- */
+.todo { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.todo ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.todo li { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: start; padding: 7px 0; min-height: 40px; cursor: pointer; line-height: 1.4; }
+.todo li + li { border-top: 1px solid var(--border); }
+.todo .box { width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--border); background: var(--surface); display: grid; place-items: center; color: transparent; font-weight: 700; font-size: .9rem; }
+.todo li.on .box, .todo li.hit .box { background: var(--ok); border-color: var(--ok); color: #fff; }
+.todo li.on > span:last-child { color: var(--muted); text-decoration: line-through; }
+.todo li.miss .box { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.todo li.self .box { color: var(--muted); }
+.todo.review li { cursor: default; }

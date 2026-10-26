@@ -190,6 +190,66 @@
     return { res, pct: terms.length ? Math.round(100 * hits / terms.length) : 0, hits, total: terms.length };
   }
 
+  // ---------- „co napisać” – konkretne punkty odpowiedzi z notatki ----------
+  const GENERIC_TERM = /^(badanie|badania|eksperyment)( \d+)?$|^(zewnętrzne|wewnętrzne|definicyjne|charakterystyczne|pozytywne|negatywne|proceduralna|semantyczna|epizodyczna)$/i;
+  const BARE_TERM = /^(przebieg|efekty|metody|skutki|mechanizm|rola|funkcje|cechy)$/i;
+  function promptsFor(q) {
+    const out = [];
+    const seen = new Set();
+    const add = (text, term, kind) => {
+      const k = text.toLowerCase();
+      if (!seen.has(k)) { seen.add(k); out.push({ text, term: term || '', kind }); }
+    };
+    let example = false, compare = false, context = '';
+    q.blocks.forEach(b => {
+      if (b.t === 'table') {
+        const hasCorner = !!b.rows[0][0];
+        const cols = b.rows[0].filter(Boolean).slice(hasCorner && b.rows[0].length > 2 ? 1 : 0);
+        const crit = b.rows.slice(1).map(r => r[0]).filter(Boolean);
+        add('Odtwórz tabelę: ' + cols.join(' vs ') + (crit.length && crit.length <= 10 ? ' – ' + crit.join(', ') : ''), '', 'table');
+        return;
+      }
+      if (b.t !== 'item' || b.c === 'grey' || b.c === 'num') return;
+      const lead = b.h.match(/^<b>([^<]+)<\/b>\s*(\([^)]*\))?\s*([–:=]?)/);
+      if (b.c === 'yellow') {
+        if (lead && /^(badani|eksperyment)/i.test(lead[1])) add('Opisz badanie: ' + plainText(lead[1]).replace(/[:.]$/, ''), '', 'study');
+        else if (!example) add('Podaj przykład lub badanie', '', 'example');
+        example = true;
+        return;
+      }
+      if (!lead) {
+        if (b.c === 'green' && !compare) { add('Dodaj porównanie lub wniosek', '', 'compare'); compare = true; return; }
+        const first = b.h.match(/<b>([^<]{3,60})<\/b>/);
+        if (first && b.c === 'red') { let t = plainText(first[1]).replace(/[:.,]$/, ''); t = t.charAt(0).toUpperCase() + t.slice(1); add('Wyjaśnij: ' + t, t, 'def'); }
+        return;
+      }
+      const numbered = /^\d+\.\s/.test(plainText(lead[1]));
+      let term = plainText(lead[1]).replace(/^\d+\.\s*/, '').replace(/[:.,]+$/, '').trim();
+      term = term.charAt(0).toUpperCase() + term.slice(1);
+      const author = lead[2] && /[A-ZŁŚŻ][a-ząćęłńóśźż]/.test(lead[2]) && !/np\./.test(lead[2]);
+      if (term.length < 3 || /^(dodatkowo|sprawdzone)/i.test(term)) return;
+      if (/^(wniosek|wnioski|podsumowanie|rozstrzygnięcie)/i.test(term)) { add('Napisz wniosek', '', 'compare'); compare = true; return; }
+      if (/^krytyka/i.test(term)) { add('Przedstaw krytykę', '', 'compare'); return; }
+      const label = term.length > 60 ? term.slice(0, 57) + '…' : term;
+      const ctx = GENERIC_TERM.test(term) && context ? ' (' + context + ')' : '';
+      let verb;
+      if (numbered && term.length > 25) verb = 'Omów stanowisko: ';
+      else if (/^(teoria|model|stanowisko|koncepcja|pogląd|podejście)/i.test(term)) verb = 'Przedstaw założenia: ';
+      else if (/^(badani|eksperyment)/i.test(term)) verb = 'Opisz badanie: ';
+      else if (/^(efekt|prawo|zjawisko)/i.test(term)) verb = 'Wyjaśnij: ';
+      else if (/^(faza|etap|przebieg|fazy|etapy)/i.test(term)) verb = 'Opisz: ';
+      else if (/^(funkcje|rola|cechy|czynniki|determinanty|rodzaje|metody|skutki|efekty|właściwości|postacie|założenia|sposoby|mechanizm|zewnętrzne|wewnętrzne)/i.test(term)) verb = 'Wymień i omów: ';
+      else if (b.c === 'red' && lead[3]) verb = 'Podaj definicję: ';
+      else if (b.c === 'green') verb = 'Porównaj / powiąż: ';
+      else verb = 'Wyjaśnij: ';
+      add(verb + label + ctx + (author ? ' – podaj autora' : ''), GENERIC_TERM.test(term) || BARE_TERM.test(term) ? '' : term, b.c === 'red' ? 'def' : 'other');
+      if (b.c === 'green') compare = true;
+      if (b.c === 'red' && !GENERIC_TERM.test(term) && !BARE_TERM.test(term)) context = term.replace(/\s*[–(].*$/, '');
+    });
+    if (!compare && out.length) add('Zakończ porównaniem lub wnioskiem', '', 'compare');
+    return out;
+  }
+
   // ---------- plan ----------
   const blockKey = (date, i) => date + '#' + i;
   function dayDone(p) { return p.blocks.filter((_, i) => S.done[blockKey(p.date, i)]).length; }
@@ -677,10 +737,11 @@
       setView('<a class="btn sm ghost" href="' + back + '">‹ Wróć</a><h1 style="margin-top:12px">' + (key === 'exam' ? 'Wylosowane pytania' : 'Napisz z pamięci') + '</h1>' +
         ex.qs.map(n => '<div class="card exam-q" style="--accent:' + SECTION_COLORS[Q[n].sec.id] + '"><span class="qnum" style="--sec:' + SECTION_COLORS[Q[n].sec.id] + '">' + n + '</span> <b>' + esc(Q[n].title) + '</b></div>').join('') +
         '<div class="card flat small"><b>Szkielet:</b> 1. definicja → 2. autor / teoria → 3. badanie lub przykład → 4. porównanie lub wniosek. Pełne zdania, terminy fachowe.</div>' +
-        '<label class="row" style="margin:6px 0 14px"><input type="checkbox" id="tm" checked style="width:22px;height:22px"> Odliczaj czas (' + ex.limitMin + ' min)</label>' +
+        '<label class="row" style="margin:6px 0 4px"><input type="checkbox" id="tm" checked style="width:22px;height:22px"> Odliczaj czas (' + ex.limitMin + ' min)</label>' +
+        '<label class="row" style="margin:0 0 14px"><input type="checkbox" id="hn"' + (ex.hints === false ? '' : ' checked') + ' style="width:22px;height:22px"> Pokaż listę „co musisz napisać” (definicje, badania, tabele)</label>' +
         '<div class="row"><button class="btn primary" id="go">Start – piszę</button>' + (key === 'exam' ? '<button class="btn" id="redraw">↻ Losuj ponownie</button>' : '') + '</div>');
       $('#go').addEventListener('click', () => {
-        ex.phase = 'write'; ex.start = Date.now(); if (!$('#tm').checked) ex.limitMin = 0; save(); viewWrite(key);
+        ex.phase = 'write'; ex.start = Date.now(); if (!$('#tm').checked) ex.limitMin = 0; ex.hints = $('#hn').checked; save(); viewWrite(key);
       });
       const rd = $('#redraw');
       if (rd) rd.addEventListener('click', () => { const r = ex.range; S.exam = null; newExam(r === 'słabe pytania' ? 'slabe' : r.replace('pyt. ', '').replace('–', '-')); viewWrite('exam'); });
@@ -688,9 +749,20 @@
     }
     setView('<div class="row between"><a class="btn sm ghost" href="' + back + '">‹ Wróć</a><span class="big-timer" id="et"></span></div>' +
       ex.qs.map(n => '<div class="card exam-q" style="--accent:' + SECTION_COLORS[Q[n].sec.id] + '"><div style="margin-bottom:10px"><span class="qnum" style="--sec:' + SECTION_COLORS[Q[n].sec.id] + '">' + n + '</span> <b>' + esc(Q[n].title) + '</b></div>' +
+        (ex.hints === false ? '' : todoHTML(ex, n)) +
         '<textarea data-ans="' + n + '" placeholder="Pisz pełnymi zdaniami: definicja, autor, badanie, porównanie…" autocapitalize="sentences" spellcheck="true">' + esc(ex.answers[n] || '') + '</textarea></div>').join('') +
       '<div class="row"><button class="btn primary" id="fin">Zakończ i sprawdź z notatką</button></div><p class="small muted">Odpowiedzi zapisują się na bieżąco – możesz zamknąć aplikację i wrócić.</p>');
     $$('[data-ans]').forEach(t => t.addEventListener('input', () => { ex.answers[t.dataset.ans] = t.value; save(); }));
+    $$('[data-todo]').forEach(li => li.addEventListener('click', () => {
+      const [n, i] = li.dataset.todo.split(':').map(Number);
+      ex.ticks = ex.ticks || {};
+      const list = ex.ticks[n] = ex.ticks[n] || [];
+      const at = list.indexOf(i);
+      if (at >= 0) list.splice(at, 1); else list.push(i);
+      li.classList.toggle('on', at < 0);
+      li.setAttribute('aria-pressed', at < 0);
+      save();
+    }));
     $('#fin').addEventListener('click', () => {
       const empty = ex.qs.filter(n => !(ex.answers[n] || '').trim()).length;
       if (empty && !confirm('Puste odpowiedzi: ' + empty + '. Mimo to sprawdzić?')) return;
@@ -711,6 +783,32 @@
     examTick = setInterval(tick, 1000);
   }
 
+  function todoHTML(ex, n) {
+    const items = promptsFor(Q[n]);
+    if (!items.length) return '';
+    const ticks = (ex.ticks && ex.ticks[n]) || [];
+    return '<div class="todo"><div class="kicker">Co musisz napisać · ' + items.length + ' ' + plural(items.length, 'punkt', 'punkty', 'punktów') + '</div><ul>' +
+      items.map((it, i) => '<li class="' + (ticks.includes(i) ? 'on' : '') + '" data-todo="' + n + ':' + i + '" role="button" aria-pressed="' + ticks.includes(i) + '"><span class="box">✓</span><span>' + esc(it.text) + '</span></li>').join('') +
+      '</ul><p class="small muted" style="margin:6px 0 0">Stuknij punkt, gdy go napiszesz.</p></div>';
+  }
+  function reviewTodoHTML(ex, n) {
+    const items = promptsFor(Q[n]);
+    if (!items.length) return '';
+    const aw = normWords(ex.answers[n] || '');
+    const ticks = (ex.ticks && ex.ticks[n]) || [];
+    let found = 0;
+    const rows = items.map((it, i) => {
+      const auto = it.term ? termHit(it.term, aw) : null;
+      const ok = auto === true || (auto === null && ticks.includes(i));
+      if (ok) found++;
+      const st = auto === true ? 'hit' : auto === false ? 'miss' : (ticks.includes(i) ? 'hit' : 'self');
+      const note = auto === false ? 'nie widzę tego terminu' : auto === null ? (ticks.includes(i) ? 'odhaczone przez Ciebie' : 'sprawdź sam(a)') : '';
+      return '<li class="' + st + '"><span class="box">' + (st === 'miss' ? '✗' : st === 'self' ? '?' : '✓') + '</span><span>' + esc(it.text) +
+        (note ? ' <span class="small muted">– ' + note + '</span>' : '') + '</span></li>';
+    }).join('');
+    return '<div class="todo review" style="margin-top:14px"><div class="row between"><b>Co trzeba było napisać</b><span class="muted">' + found + ' / ' + items.length + '</span></div><ul>' + rows + '</ul></div>';
+  }
+
   function viewReview(key) {
     const ex = S[key];
     if (!ex) { location.hash = '#/egzamin'; return; }
@@ -722,10 +820,11 @@
       const g = ex.grades[n];
       html += '<div class="card exam-q" style="--sec:' + SECTION_COLORS[q.sec.id] + ';--accent:' + SECTION_COLORS[q.sec.id] + '">' +
         '<div class="qhead"><span class="qnum">' + n + '</span><h2 style="margin:6px 0 0">' + esc(q.title) + '</h2></div>' +
-        '<div style="margin:14px 0"><div class="row between"><b>Kluczowe terminy w Twojej odpowiedzi</b><span class="muted">' + cov.hits + ' / ' + cov.total + ' (' + cov.pct + '%)</span></div>' +
+        reviewTodoHTML(ex, n) +
+        '<details style="margin:14px 0"><summary class="row between" style="cursor:pointer"><b>Wszystkie pogrubione terminy z notatki</b><span class="muted">' + cov.hits + ' / ' + cov.total + ' (' + cov.pct + '%)</span></summary>' +
         '<div class="progress ok" style="margin:6px 0 10px"><i style="width:' + cov.pct + '%"></i></div><div class="terms">' +
         cov.res.map(r => '<span class="term ' + (r.hit ? 'hit' : 'miss') + '">' + (r.hit ? '✓ ' : '✗ ') + esc(r.t) + '</span>').join('') + '</div>' +
-        '<p class="small muted" style="margin:8px 0 0">Wykrywanie jest przybliżone (odmiana słów) – traktuj jako podpowiedź, nie ocenę.</p></div>' +
+        '<p class="small muted" style="margin:8px 0 0">Wykrywanie jest przybliżone (odmiana słów) – traktuj jako podpowiedź, nie ocenę.</p></details>' +
         '<div class="compare"><div><div class="kicker">Twoja odpowiedź</div><div class="my-answer">' + (esc(ex.answers[n] || '').trim() || '<span class="muted">(pusto)</span>') + '</div></div>' +
         '<div><div class="kicker">Notatka</div><div class="note">' + renderBlocks(q.blocks) + '</div></div></div>' +
         '<div class="kicker" style="margin-top:14px">Jak poszło?</div><div class="grade-btns">' +
