@@ -379,3 +379,10 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
   .tabbar a { font-size: .7rem; }
   .pairs { grid-template-columns: 1fr; }
 }
+
+/* ---------- wybór zakresu w grach ---------- */
+.scope .chip .muted { font-weight: 500; font-size: .8rem; }
+.scope .chip[disabled] { opacity: .45; pointer-events: none; }
+.range-row { gap: 8px; }
+.range-row input { width: 84px; min-height: 40px; text-align: center; }
+.big-start { width: 100%; min-height: 56px; font-size: 1.1rem; margin-bottom: 14px; }

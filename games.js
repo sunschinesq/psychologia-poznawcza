@@ -125,7 +125,7 @@
     const g = G();
     const st = streak();
     let html = '<h1>Gry</h1><p class="muted">Krótkie gry na rozgrzewkę albo przerwę między blokami. Wszystkie korzystają z Twojej notatki.</p>' +
-      todayCard() + '<div class="grid2">' +
+      todayCard() + scopePicker('') + '<div class="grid2">' +
       GAMES.map(x => {
         let best = '';
         if (x.id === 'kolejnosc') { const ok = GD.sequences.filter((_, i) => g.seq[i] === 0).length; best = ok + ' / ' + GD.sequences.length + ' bez błędu'; }
@@ -143,22 +143,79 @@
         return '<div class="badge' + (when ? ' on' : '') + '"><div class="bicon">' + b.icon + '</div><b>' + P.esc(b.name) + '</b><span>' + P.esc(b.desc) + '</span>' +
           (when ? '<span class="when">' + P.fmtDate(when) + '</span>' : '') + '</div>';
       }).join('') + '</div>';
-    P.setView(html);
+    P.setView(html, { keepScroll: viewHome.keep });
+    viewHome.keep = false;
+    bindScope(() => { viewHome.keep = true; viewHome(); });
   }
 
   function head(title, right) {
     return '<div class="row between"><a class="btn sm ghost" href="#/gry">‹ Gry</a><span class="muted small">' + (right || '') + '</span></div><h1 style="margin-top:10px">' + title + '</h1>';
   }
-  function secChips(sel) {
-    return '<div class="chips" style="margin:8px 0 14px">' + api().NOTES.sections.map(s =>
-      '<button class="chip' + (sel.has(s.id) ? ' on' : '') + '" data-sec="' + s.id + '">' + s.id + '</button>').join('') +
-      '<span class="small muted" style="align-self:center">nic nie zaznaczone = wszystkie działy</span></div>';
+  // ---------- wspólny zakres pytań dla wszystkich gier ----------
+  function scope() { return G().scope || { mode: 'all' }; }
+  function scopeQs() {
+    const P = api();
+    const sc = scope();
+    if (sc.mode === 'weak') return new Set(P.S.weak);
+    if (sc.mode === 'secs') return new Set(P.QUESTIONS.filter(q => (sc.secs || []).includes(q.sec.id)).map(q => q.n));
+    if (sc.mode === 'custom') return new Set(P.parseRange(sc.from + '–' + sc.to));
+    return new Set(P.QUESTIONS.map(q => q.n));
   }
-  function bindSecChips(sel) {
-    $$('[data-sec]').forEach(b => b.addEventListener('click', () => {
-      if (sel.has(b.dataset.sec)) sel.delete(b.dataset.sec); else sel.add(b.dataset.sec);
-      b.classList.toggle('on');
+  // q = 0 oznacza materiał spoza jednego pytania (np. oś czasu) – tylko przy „wszystkich”
+  function inScope(q) { return q ? scopeQs().has(q) : scope().mode === 'all'; }
+  function scopeLabel() {
+    const sc = scope();
+    if (sc.mode === 'weak') return '★ słabe pytania (' + api().S.weak.length + ')';
+    if (sc.mode === 'secs') return 'dział' + ((sc.secs || []).length > 1 ? 'y ' : ' ') + (sc.secs || []).join(', ');
+    if (sc.mode === 'custom') return 'pyt. ' + (sc.from === sc.to ? sc.from : sc.from + '–' + sc.to);
+    return 'wszystkie pytania (1–72)';
+  }
+  function setScope(sc) {
+    if (sc.mode === 'secs' && !(sc.secs || []).length) sc = { mode: 'all' };
+    G().scope = sc;
+    api().persist();
+  }
+  function scopePicker(countText) {
+    const P = api();
+    const sc = scope();
+    const secs = sc.mode === 'secs' ? sc.secs : [];
+    return '<div class="card scope"><div class="row between"><b>Zakres pytań</b><span class="small muted">wspólny dla wszystkich gier</span></div>' +
+      '<div class="chips" style="margin:10px 0">' +
+      '<button class="chip' + (sc.mode === 'all' ? ' on' : '') + '" data-scope="all">Wszystkie</button>' +
+      '<button class="chip' + (sc.mode === 'weak' ? ' on' : '') + '" data-scope="weak"' + (P.S.weak.length ? '' : ' disabled') + '>★ Słabe (' + P.S.weak.length + ')</button>' +
+      P.NOTES.sections.map(x => '<button class="chip' + (secs.includes(x.id) ? ' on' : '') + '" data-scope-sec="' + x.id + '" title="' + P.esc(x.title) + '">' + x.id + ' <span class="muted">' + x.from + '–' + x.to + '</span></button>').join('') +
+      '</div><div class="row range-row"><span>Własny zakres: pyt.</span>' +
+      '<input type="number" inputmode="numeric" min="1" max="72" id="sc-from" value="' + (sc.mode === 'custom' ? sc.from : '') + '" placeholder="od" aria-label="od pytania">' +
+      '<span>–</span><input type="number" inputmode="numeric" min="1" max="72" id="sc-to" value="' + (sc.mode === 'custom' ? sc.to : '') + '" placeholder="do" aria-label="do pytania">' +
+      '<button class="btn sm' + (sc.mode === 'custom' ? ' primary' : '') + '" id="sc-set">Ustaw</button></div>' +
+      '<p class="small" style="margin:10px 0 0"><b>Teraz:</b> ' + P.esc(scopeLabel()) + (countText ? ' · <span class="muted">' + countText + '</span>' : '') + '</p></div>';
+  }
+  function bindScope(rerender) {
+    $$('[data-scope]').forEach(b => b.addEventListener('click', () => { setScope({ mode: b.dataset.scope }); rerender(); }));
+    $$('[data-scope-sec]').forEach(b => b.addEventListener('click', () => {
+      const sc = scope();
+      const secs = sc.mode === 'secs' ? (sc.secs || []).slice() : [];
+      const id = b.dataset.scopeSec;
+      const at = secs.indexOf(id);
+      if (at >= 0) secs.splice(at, 1); else secs.push(id);
+      const order = api().NOTES.sections.map(x => x.id);
+      secs.sort((x, y) => order.indexOf(x) - order.indexOf(y));
+      setScope({ mode: 'secs', secs });
+      rerender();
     }));
+    const set = $('#sc-set');
+    if (set) set.addEventListener('click', () => {
+      let a = parseInt($('#sc-from').value, 10), b = parseInt($('#sc-to').value, 10);
+      if (isNaN(a) && isNaN(b)) { api().toast('Wpisz numery pytań, np. 21 i 29.'); return; }
+      if (isNaN(a)) a = b; if (isNaN(b)) b = a;
+      a = Math.max(1, Math.min(72, a)); b = Math.max(1, Math.min(72, b));
+      if (a > b) [a, b] = [b, a];
+      setScope({ mode: 'custom', from: a, to: b });
+      rerender();
+    });
+  }
+  function tooFew(what) {
+    return '<div class="empty">W tym zakresie jest za mało ' + what + '. Poszerz zakres powyżej.</div>';
   }
   function qLink(q) {
     const Q = api().Q[q];
@@ -207,12 +264,14 @@
   function viewCloze(params) {
     const P = api();
     if (!cz) {
-      const sel = viewCloze.sel || (viewCloze.sel = new Set());
-      P.setView(head('✍ Uzupełnij lukę') + '<p class="muted">Dostaniesz 10 zdań z notatki. W każdym brakuje pogrubionego terminu – dokładnie tych słów oczekuje wykładowca.</p>' +
-        '<div class="card"><b>Zakres</b>' + secChips(sel) + '<button class="btn primary" id="go">Start</button></div>');
-      bindSecChips(sel);
-      $('#go').addEventListener('click', () => {
-        const pool = buildCloze().filter(c => !sel.size || sel.has(c.s));
+      const qs = scopeQs();
+      const pool = buildCloze().filter(c => qs.has(c.q));
+      const nTerms = new Set(pool.map(c => c.term.toLowerCase())).size;
+      P.setView(head('✍ Uzupełnij lukę') + '<p class="muted">Dostaniesz do 10 zdań z notatki. W każdym brakuje pogrubionego terminu – dokładnie tych słów oczekuje wykładowca.</p>' +
+        scopePicker(nTerms + ' ' + P.plural(nTerms, 'termin', 'terminy', 'terminów') + ' do gry') +
+        (nTerms ? '<button class="btn primary big-start" id="go">Start' + (nTerms < 10 ? ' (' + nTerms + ' ' + P.plural(nTerms, 'zdanie', 'zdania', 'zdań') + ')' : '') + '</button>' : tooFew('terminów')));
+      bindScope(() => viewCloze(params));
+      if (nTerms) $('#go').addEventListener('click', () => {
         const picked = [];
         const usedTerms = new Set();
         P.shuffle(pool).forEach(c => { if (picked.length < 10 && !usedTerms.has(c.term.toLowerCase())) { usedTerms.add(c.term.toLowerCase()); picked.push(c); } });
@@ -223,10 +282,11 @@
     }
     if (cz.i >= cz.items.length) {
       const n = cz.items.length;
-      const rec = record('luka', cz.score, higher);
+      const rec = n === 10 ? record('luka', cz.score, higher) : (G().plays.luka = (G().plays.luka || 0) + 1, api().save(), false);
       P.setView(head('✍ Uzupełnij lukę') + '<div class="card"><div class="stat">' + cz.score + ' / ' + n + '</div>' + (rec ? '<div class="best">Nowy rekord!</div>' : '') + '</div>' +
         (cz.wrong.length ? '<h2>Do powtórki</h2>' + cz.wrong.map(c => '<div class="card small"><p>' + P.esc(c.before) + '<b>' + P.esc(c.term) + '</b>' + P.esc(c.after) + '</p>' + qLink(c.q) + '</div>').join('') : '') +
-        '<div class="row"><button class="btn primary" id="again">↻ Jeszcze raz</button><a class="btn" href="#/gry">Gry</a></div>');
+        '<div class="row"><button class="btn primary" id="again">↻ Jeszcze raz</button><a class="btn" href="#/gry">Gry</a></div>' +
+        (n < 10 ? '<p class="small muted">Rekord liczy się tylko w pełnej rundzie (10 zdań).</p>' : ''));
       $('#again').addEventListener('click', () => { cz = null; viewCloze(params); });
       return;
     }
@@ -260,19 +320,39 @@
     const tbl = (api().NOTES.appendix.find(a => a.title.startsWith('Ściąga')) || { blocks: [] }).blocks.find(b => b.t === 'table');
     return tbl ? tbl.rows.slice(1).filter(r => r[0] && r[1]).map(r => ({ who: r[0], what: r[1] })) : [];
   }
+  // pytania, w których notatka wspomina autora (po nazwisku)
+  let authorQsCache = null;
+  function authorQs(row) {
+    authorQsCache = authorQsCache || new Map();
+    if (!authorQsCache.has(row.who)) {
+      const names = (row.who.match(/[A-ZŁŚŻ][a-ząćęłńóśźż'’-]{3,}/g) || []).map(n => n.toLowerCase());
+      authorQsCache.set(row.who, api().QUESTIONS.filter(q => names.some(n => q.text.includes(n))).map(q => q.n));
+    }
+    return authorQsCache.get(row.who);
+  }
   let kt = null;
-  function viewWho() {
+  function viewWho(started) {
     const P = api();
     if (!kt) {
       const rows = authorRows();
-      kt = { items: P.shuffle(rows).slice(0, 10).map(r => ({ r, mode: Math.random() < 0.6 ? 'who' : 'what' })), rows, i: 0, score: 0, picked: null, wrong: [] };
+      const qs = scopeQs();
+      const inRange = rows.filter(r => authorQs(r).some(n => qs.has(n)));
+      if (!started) {
+        P.setView(head('🗣 Kto to powiedział?') + '<p class="muted">Raz dostajesz hasło i wybierasz autora, raz odwrotnie. Autorzy są dobrani do zakresu – po pytaniach, w których notatka o nich wspomina.</p>' +
+          scopePicker(inRange.length + ' ' + P.plural(inRange.length, 'autor', 'autorów', 'autorów') + ' w zakresie') +
+          (inRange.length ? '<button class="btn primary big-start" id="go">Start</button>' : tooFew('autorów')));
+        bindScope(() => viewWho());
+        if (inRange.length) $('#go').addEventListener('click', () => viewWho(true));
+        return;
+      }
+      kt = { items: P.shuffle(inRange).slice(0, 10).map(r => ({ r, mode: Math.random() < 0.6 ? 'who' : 'what' })), rows, i: 0, score: 0, picked: null, wrong: [] };
     }
     if (kt.i >= kt.items.length) {
-      const rec = record('kto', kt.score, higher);
+      const rec = kt.items.length === 10 ? record('kto', kt.score, higher) : false;
       P.setView(head('🗣 Kto to powiedział?') + '<div class="card"><div class="stat">' + kt.score + ' / ' + kt.items.length + '</div>' + (rec ? '<div class="best">Nowy rekord!</div>' : '') + '</div>' +
         (kt.wrong.length ? '<h2>Do powtórki</h2><div class="card">' + kt.wrong.map(r => '<p><b>' + P.esc(r.who) + '</b> – ' + P.esc(r.what) + '</p>').join('') + '</div>' : '') +
         '<div class="row"><button class="btn primary" id="again">↻ Jeszcze raz</button><a class="btn" href="#/n/sciaga">Ściąga</a><a class="btn" href="#/gry">Gry</a></div>');
-      $('#again').addEventListener('click', () => { kt = null; viewWho(); });
+      $('#again').addEventListener('click', () => { kt = null; viewWho(true); });
       return;
     }
     const it = kt.items[kt.i];
@@ -290,23 +370,30 @@
       $$('[data-o]').forEach(b => b.addEventListener('click', () => {
         kt.picked = +b.dataset.o;
         if (it.opts[kt.picked] === it.r) kt.score++; else kt.wrong.push(it.r);
-        viewWho();
+        viewWho(true);
       }));
-    } else $('#next').addEventListener('click', () => { kt.i++; kt.picked = null; viewWho(); });
+    } else $('#next').addEventListener('click', () => { kt.i++; kt.picked = null; viewWho(true); });
   }
 
   // ---------- 3. Ułóż w kolejności ----------
   let sq = null;
+  function nextSeq(idx) {
+    const idxs = GD.sequences.map((s, i) => i).filter(i => inScope(GD.sequences[i].q));
+    return idxs.find(i => i > idx) ?? idxs[0] ?? (idx + 1) % GD.sequences.length;
+  }
   function viewSeq(arg) {
     const P = api();
     const g = G();
     if (arg == null || !GD.sequences[arg]) {
       sq = null;
+      const idxs = GD.sequences.map((s, i) => i).filter(i => inScope(GD.sequences[i].q));
       P.setView(head('🔢 Ułóż w kolejności') + '<p class="muted">Stukaj elementy po kolei – od pierwszego do ostatniego. Zielony ✓ = ułożone bez błędu.</p>' +
-        '<a class="btn primary" style="margin-bottom:14px" href="#/gry/kolejnosc/' + Math.floor(Math.random() * GD.sequences.length) + '">🎲 Losowa sekwencja</a>' +
-        '<div class="card qlist" style="padding:0">' + GD.sequences.map((s, i) =>
+        scopePicker(idxs.length + ' ' + P.plural(idxs.length, 'sekwencja', 'sekwencje', 'sekwencji')) +
+        (idxs.length ? '<a class="btn primary" style="margin-bottom:14px" href="#/gry/kolejnosc/' + idxs[Math.floor(Math.random() * idxs.length)] + '">🎲 Losowa sekwencja z zakresu</a>' +
+        '<div class="card qlist" style="padding:0">' + idxs.map(i => [GD.sequences[i], i]).map(([s, i]) =>
           '<a href="#/gry/kolejnosc/' + i + '"><span class="qnum">' + (s.q || '★') + '</span><span>' + P.esc(s.title) + ' <span class="muted small">(' + s.items.length + ')</span></span><span class="flags">' +
-          (g.seq[i] === 0 ? '<span class="flag-read">✓</span>' : g.seq[i] != null ? '<span class="muted small">' + g.seq[i] + ' bł.</span>' : '') + '</span></a>').join('') + '</div>');
+          (g.seq[i] === 0 ? '<span class="flag-read">✓</span>' : g.seq[i] != null ? '<span class="muted small">' + g.seq[i] + ' bł.</span>' : '') + '</span></a>').join('') + '</div>' : tooFew('sekwencji')));
+      bindScope(() => viewSeq());
       return;
     }
     const idx = +arg;
@@ -326,7 +413,7 @@
         sq.order.filter(i => !sq.done.includes(i)).map(i => '<button class="btn opt' + (sq.flash === i ? ' wrong shake' : '') + '" data-i="' + i + '">' + P.esc(s.items[i]) + '</button>').join('');
     } else {
       html += '<div class="card"><div class="stat">' + (sq.mistakes ? sq.mistakes + ' ' + P.plural(sq.mistakes, 'błąd', 'błędy', 'błędów') : 'Bez błędu! 🎉') + '</div></div>' +
-        '<div class="row"><button class="btn" id="again">↻ Jeszcze raz</button><a class="btn primary" href="#/gry/kolejnosc/' + ((idx + 1) % GD.sequences.length) + '">Następna ›</a><a class="btn" href="#/gry/kolejnosc">Lista</a></div>';
+        '<div class="row"><button class="btn" id="again">↻ Jeszcze raz</button><a class="btn primary" href="#/gry/kolejnosc/' + nextSeq(idx) + '">Następna ›</a><a class="btn" href="#/gry/kolejnosc">Lista</a></div>';
     }
     P.setView(html, { keepScroll: true });
     sq.flash = null;
@@ -363,15 +450,18 @@
   function viewTable(arg) {
     const P = api();
     const g = G();
-    const list = puzzleTables();
-    const t = list.find(x => x.id === arg);
+    const all = puzzleTables();
+    const t = all.find(x => x.id === arg);
     if (!t) {
       tz = null;
+      const list = all.filter(x => inScope(x.q));
       P.setView(head('▤ Puzzle z tabeli') + '<p class="muted">Stuknij kafelek z dołu, a potem pustą komórkę, do której pasuje. Dobre trafienie zostaje, złe miga na czerwono.</p>' +
-        '<div class="card qlist" style="padding:0">' + list.map(x =>
+        scopePicker(list.length + ' ' + P.plural(list.length, 'tabela', 'tabele', 'tabel')) +
+        (list.length ? '<div class="card qlist" style="padding:0">' + list.map(x =>
           '<a href="#/gry/tabela/' + x.id + '" style="--sec:' + P.SECTION_COLORS[x.sec] + '"><span class="qnum">' + x.q + '</span><span>' + P.esc(x.title) +
           ' <span class="muted small">(' + (x.rows.length - 1) * (x.rows[0].length - 1) + ' komórek)</span></span><span class="flags">' +
-          (g.tables[x.id] === 0 ? '<span class="flag-read">✓</span>' : g.tables[x.id] != null ? '<span class="muted small">' + g.tables[x.id] + ' bł.</span>' : '') + '</span></a>').join('') + '</div>');
+          (g.tables[x.id] === 0 ? '<span class="flag-read">✓</span>' : g.tables[x.id] != null ? '<span class="muted small">' + g.tables[x.id] + ' bł.</span>' : '') + '</span></a>').join('') + '</div>' : tooFew('tabel – tabele są m.in. w pyt. 29, 31, 35, 43, 49, 55, 62, 66')));
+      bindScope(() => viewTable());
       return;
     }
     if (!tz || tz.id !== t.id) {
@@ -424,16 +514,18 @@
     const P = api();
     clearInterval(prTick);
     if (!pr) {
-      const sel = viewPairs.sel || (viewPairs.sel = new Set());
-      P.setView(head('⚡ Dopasuj pary') + '<p class="muted">Stuknij termin, a potem jego definicję. Liczy się czas – każdy błąd to +3 s kary.</p>' +
-        '<div class="card"><b>Zakres</b>' + secChips(sel) + '<button class="btn primary" id="go">Start</button></div>');
-      bindSecChips(sel);
-      $('#go').addEventListener('click', () => {
+      const qs = scopeQs();
+      const avail = P.CARDS.filter(c => qs.has(c.q));
+      const nAvail = new Set(avail.map(c => c.term.toLowerCase())).size;
+      P.setView(head('⚡ Dopasuj pary') + '<p class="muted">Stuknij termin, a potem jego definicję. Liczy się czas – każdy błąd to +3 s kary. Rekord liczy się przy 6 parach.</p>' +
+        scopePicker(nAvail + ' ' + P.plural(nAvail, 'termin', 'terminy', 'terminów') + ' z fiszek') +
+        (nAvail >= 3 ? '<button class="btn primary big-start" id="go">Start</button>' : tooFew('terminów (potrzeba min. 3)')));
+      bindScope(() => viewPairs());
+      if (nAvail >= 3) $('#go').addEventListener('click', () => {
         const seen = new Set();
-        const cards = P.shuffle(P.CARDS.filter(c => !sel.size || sel.has(c.s))).filter(c => { const k = c.term.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
-        if (cards.length < 3) { P.toast('Za mało fiszek w tym zakresie – wybierz więcej działów.'); return; }
+        const cards = P.shuffle(avail).filter(c => { const k = c.term.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
         const defs = cards.map(c => { let d = P.plainText(c.def); if (d.length > 130) d = d.slice(0, 127) + '…'; return { id: c.id, d }; });
-        pr = { cards, left: P.shuffle(cards.map(c => c.id)), right: P.shuffle(defs), matched: new Set(), selL: null, selR: null, mistakes: 0, start: Date.now(), flash: [], scope: Array.from(sel).sort().join(',') };
+        pr = { cards, left: P.shuffle(cards.map(c => c.id)), right: P.shuffle(defs), matched: new Set(), selL: null, selR: null, mistakes: 0, start: Date.now(), flash: [] };
         viewPairs();
       });
       return;
@@ -445,7 +537,7 @@
       P.setView(head('⚡ Dopasuj pary') + '<div class="card"><div class="stat">' + pr.result.secs + ' s</div><div class="small muted">' + pr.mistakes + ' ' + P.plural(pr.mistakes, 'błąd', 'błędy', 'błędów') + ' (+3 s każdy)</div>' +
         (pr.result.rec ? '<div class="best">Nowy rekord!</div>' : '') + '</div>' +
         '<div class="row"><button class="btn primary" id="again">↻ Jeszcze raz</button><button class="btn" id="change">Zmień zakres</button><a class="btn" href="#/gry">Gry</a></div>');
-      $('#again').addEventListener('click', () => { const scope = pr.scope; pr = null; viewPairs.sel = new Set(scope ? scope.split(',') : []); viewPairs(); $('#go').click(); });
+      $('#again').addEventListener('click', () => { pr = null; viewPairs(); const go = $('#go'); if (go) go.click(); });
       $('#change').addEventListener('click', () => { pr = null; viewPairs(); });
       return;
     }
@@ -474,14 +566,17 @@
     const P = api();
     clearInterval(pfTick);
     if (!pf) {
-      P.setView(head('⚖ Prawda czy fałsz') + '<p class="muted">60 sekund. Zdania z notatki – część z nich to pułapki z części „Niejasności” (np. obniżenie / podwyższenie progu, pomylone autorstwo). Za dobrą odpowiedź +1, za złą −1.</p>' +
-        '<button class="btn primary" id="go" style="min-height:56px;font-size:1.1rem">Start</button>');
-      $('#go').addEventListener('click', () => { pf = { items: P.shuffle(GD.statements), i: 0, score: 0, good: 0, wrong: [], end: Date.now() + PF_SECONDS * 1000, fb: null }; viewTF(); });
+      const items = GD.statements.filter(x => inScope(x.q));
+      P.setView(head('⚖ Prawda czy fałsz') + '<p class="muted">60 sekund. Zdania z notatki – część z nich to pułapki z części „Niejasności” (np. obniżenie / podwyższenie progu, pomylone autorstwo). Za dobrą odpowiedź +1, za złą −1. Rekord liczy się przy wszystkich pytaniach.</p>' +
+        scopePicker(items.length + ' ' + P.plural(items.length, 'zdanie', 'zdania', 'zdań')) +
+        (items.length ? '<button class="btn primary big-start" id="go">Start</button>' : tooFew('zdań')));
+      bindScope(() => viewTF());
+      if (items.length) $('#go').addEventListener('click', () => { pf = { full: scope().mode === 'all', items: P.shuffle(items), i: 0, score: 0, good: 0, wrong: [], end: Date.now() + PF_SECONDS * 1000, fb: null }; viewTF(); });
       return;
     }
     const over = Date.now() >= pf.end || pf.i >= pf.items.length;
     if (over) {
-      if (!pf.result) pf.result = { rec: record('pf', pf.score, higher) };
+      if (!pf.result) pf.result = { rec: pf.full ? record('pf', pf.score, higher) : false };
       P.setView(head('⚖ Prawda czy fałsz') + '<div class="card"><div class="stat">' + pf.score + ' pkt</div><div class="small muted">' + pf.good + ' dobrych, ' + pf.wrong.length + ' złych</div>' +
         (pf.result.rec ? '<div class="best">Nowy rekord!</div>' : '') + '</div>' +
         (pf.wrong.length ? '<h2>Pomyłki</h2>' + pf.wrong.map(w => '<div class="card small"><p><b>' + (w.t ? 'PRAWDA' : 'FAŁSZ') + ':</b> ' + P.esc(w.s) + '</p><p class="muted">' + P.esc(w.why) + '</p>' + qLink(w.q) + '</div>').join('') : '') +
@@ -517,19 +612,15 @@
   function viewDraw() {
     const P = api();
     const S = P.S;
-    const ranges = [['1-34', 'pyt. 1–34'], ['35-72', 'pyt. 35–72'], ['1-72', 'wszystkie 1–72']];
-    if (S.weak.length >= 3) ranges.push(['slabe', '★ słabe (' + S.weak.length + ')']);
-    P.NOTES.sections.forEach(s => ranges.push([s.from + '-' + s.to, 'dział ' + s.id]));
-    const cur = viewDraw.range || '1-72';
     const result = viewDraw.result;
-    P.setView(head('🎲 Losownik pytań') + '<div class="chips" style="margin-bottom:14px">' +
-      ranges.map(r => '<button class="chip' + (r[0] === cur ? ' on' : '') + '" data-r="' + r[0] + '">' + r[1] + '</button>').join('') + '</div>' +
-      '<div class="slots">' + [0, 1, 2].map(i => '<div class="slot-n" id="s' + i + '">' + (result ? result[i] : '?') + '</div>').join('') + '</div>' +
-      '<button class="btn primary" id="spin" style="width:100%;min-height:60px;font-size:1.15rem;margin:14px 0">🎲 Losuj</button>' +
+    const qs = Array.from(scopeQs()).sort((x, y) => x - y);
+    P.setView(head('🎲 Losownik pytań') + scopePicker(qs.length + ' ' + P.plural(qs.length, 'pytanie', 'pytania', 'pytań') + ' do losowania') +
+      '<div class="slots">' + [0, 1, 2].map(i => '<div class="slot-n" id="s' + i + '">' + (result ? (result[i] != null ? result[i] : '–') : '?') + '</div>').join('') + '</div>' +
+      '<button class="btn primary" id="spin" style="width:100%;min-height:60px;font-size:1.15rem;margin:14px 0"' + (qs.length ? '' : ' disabled') + '>🎲 Losuj' + (qs.length && qs.length < 3 ? ' (tylko ' + qs.length + ')' : '') + '</button>' +
       '<div id="res">' + (result ? result.map(n => '<div class="card small" style="margin-bottom:8px">' + qLink(n) + '</div>').join('') +
         '<button class="btn primary" id="exam">✎ Napisz próbny egzamin z tych pytań</button>' : '') + '</div>');
-    $$('[data-r]').forEach(b => b.addEventListener('click', () => { viewDraw.range = b.dataset.r; viewDraw.result = null; viewDraw(); }));
-    const pool = () => cur === 'slabe' ? S.weak.slice() : P.parseRange(cur.replace('-', '–'));
+    bindScope(() => { viewDraw.result = null; viewDraw(); });
+    const pool = () => qs;
     $('#spin').addEventListener('click', () => {
       if (spin) return;
       const p = pool();
@@ -541,7 +632,8 @@
         [0, 1, 2].forEach(i => {
           const box = $('#s' + i);
           if (!box) return;
-          if (el > 700 + i * 450) { box.textContent = final[i]; box.classList.add('stop'); }
+          if (el > 700 + i * 450) { box.textContent = final[i] != null ? final[i] : '–'; box.classList.add('stop'); }
+          else if (i >= p.length) box.textContent = '–';
           else box.textContent = p[Math.floor(Math.random() * p.length)];
         });
         if (el > 700 + 2 * 450 + 100) {
@@ -556,7 +648,7 @@
     const ex = $('#exam');
     if (ex) ex.addEventListener('click', () => {
       if (S.exam && !confirm('Masz rozpoczęty egzamin. Zacząć nowy (stary zostanie porzucony)?')) return;
-      const label = cur === 'slabe' ? 'słabe pytania' : 'pyt. ' + cur.replace('-', '–');
+      const label = scopeLabel();
       viewDraw.result = null;
       P.startExamWith(result, label + ' (losownik)');
     });
