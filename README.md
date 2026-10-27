@@ -9,7 +9,6 @@ Prosta aplikacja webowa do nauki na egzamin warunkowy (czw 17.12.2026). Działa 
 - **Notatki**: 72 zagadnienia w 8 działach, z kolorami jak w PDF (czerwone = definicje, żółte = przykłady i badania, zielone = porównania, szare = dopiski). Do tego wyszukiwarka, gwiazdka „słabe pytanie”, przycisk „zasłoń” do odpytywania się, ściąga, pytania kontrolne i tabele do odtwarzania z pamięci.
 - **Fiszki**: 106 fiszek „termin → definicja” z pogrubionych pojęć, quiz ABCD i 72 pytania egzaminacyjne. Fiszki układają się w pudełka Leitnera.
 - **Egzamin**: losowanie 3 pytań z wybranego zakresu, 15 min na pytanie, pisanie odpowiedzi, a potem porównanie z notatką i lista kluczowych terminów, których zabrakło. Pytania ocenione na „średnio” albo „słabo” trafiają na listę słabych pytań.
-
 - **Gry**: uzupełnij lukę, kto to powiedział, ułóż w kolejności, puzzle z tabeli, dopasuj pary na czas, prawda czy fałsz (60 s) i losownik pytań na próbny egzamin. Do tego seria dni nauki (niedziele jej nie przerywają) i odznaki. Treść gier „Ułóż w kolejności” i „Prawda czy fałsz” jest w `games-data.js`. Pozostałe gry biorą materiał z notatki.
 
 ## Jak otworzyć na iPadzie
