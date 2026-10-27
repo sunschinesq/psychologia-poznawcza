@@ -1,6 +1,6 @@
 // Pamięć podręczna do pracy offline. Zmień VERSION przy każdej aktualizacji plików.
-const VERSION = 'v4';
-const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'data.js', 'games-data.js', 'games.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
+const VERSION = 'v5';
+const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'data.js', 'games-data.js', 'games.js', 'extras-data.js', 'extras.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

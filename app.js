@@ -174,9 +174,10 @@
     });
     return out;
   }
-  function normWords(s) { return s.toLowerCase().split(/[^a-ząćęłńóśźż0-9]+/i).filter(Boolean); }
+  // porównanie bez polskich znaków (rysik / szybkie pisanie często je gubi)
+  function normWords(s) { return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l').split(/[^a-z0-9]+/).filter(Boolean); }
   function termHit(term, answerWords) {
-    const words = normWords(term).filter(w => w.length >= 4 && !/^(oraz|jest|przez|który|która|które|tego|jako|albo)$/.test(w));
+    const words = normWords(term).filter(w => w.length >= 4 && !/^(oraz|jest|przez|ktory|ktora|ktore|tego|jako|albo)$/.test(w));
     if (!words.length) {
       const whole = normWords(term).join(' ');
       return whole.length > 0 && answerWords.join(' ').includes(whole);
@@ -262,6 +263,69 @@
   const TOTAL_BLOCKS = STUDY_DAYS.reduce((a, p) => a + p.blocks.length, 0);
   function doneBlocks() { return STUDY_DAYS.reduce((a, p) => a + dayDone(p), 0); }
 
+  // Przeliczanie planu: zaległe bloki przenoszone na kolejne dni (S.moved: klucz bloku → nowa data).
+  // Klucz bloku się nie zmienia, więc odhaczenie i statystyki działają jak wcześniej.
+  const PLAN_BY_DATE = {};
+  PLAN.forEach(p => { PLAN_BY_DATE[p.date] = p; });
+  const ZAPAS = '2026-12-12';
+  const moved = () => S.moved || (S.moved = {});
+  function dayItems(p) {
+    const items = [];
+    p.blocks.forEach((b, i) => { const key = blockKey(p.date, i); if (!moved()[key]) items.push({ key, b, src: p, from: null }); });
+    Object.keys(moved()).forEach(key => {
+      if (moved()[key] !== p.date) return;
+      const [d, i] = key.split('#');
+      const src = PLAN_BY_DATE[d];
+      if (src && src.blocks[+i]) items.push({ key, b: src.blocks[+i], src, from: d });
+    });
+    return items;
+  }
+  const itemsDone = items => items.filter(it => S.done[it.key]).length;
+  function overdueItems(today) {
+    return PLAN.filter(p => p.date < today).flatMap(p => dayItems(p).filter(it => !S.done[it.key]).map(it => Object.assign({ at: p.date }, it)));
+  }
+  function recalcPlan(perDay) {
+    const today = todayISO();
+    const items = overdueItems(today);
+    if (!items.length) return { moved: 0, left: 0 };
+    S.movedPrev = JSON.parse(JSON.stringify(moved()));
+    const targets = PLAN.filter(p => p.date >= today && p.date <= ZAPAS && (p.blocks.length || p.date === ZAPAS));
+    const cap = {};
+    targets.forEach(p => { cap[p.date] = (p.date === ZAPAS ? 4 : perDay) - dayItems(p).filter(it => it.from).length; });
+    let n = 0;
+    items.forEach(it => {
+      const t = targets.find(p => cap[p.date] > 0);
+      if (!t) return;
+      cap[t.date]--;
+      moved()[it.key] = t.date;
+      n++;
+    });
+    save();
+    return { moved: n, left: items.length - n };
+  }
+  function recalcCard(today) {
+    const over = overdueItems(today);
+    const undo = S.movedPrev ? '<button class="btn sm ghost" data-recalc="undo">↶ Cofnij przeliczenie</button>' : '';
+    if (!over.length) return undo ? '<div class="card flat small"><span class="muted">Plan przeliczony – zaległości rozłożone na kolejne dni.</span> ' + undo + '</div>' : '';
+    const byDay = {};
+    over.forEach(it => { byDay[it.at] = (byDay[it.at] || 0) + 1; });
+    return '<div class="card"><h2>Zaległe bloki: ' + over.length + '</h2><p class="muted small">Nic się nie stało. Możesz je odhaczyć, jeśli są zrobione, albo przeliczyć plan – zaległości trafią jako dodatkowe bloki na najbliższe dni i na dzień zapasu (sob 12.12). Etap 3 (14–16.12) zostaje bez zmian.</p><div class="chips">' +
+      Object.keys(byDay).map(d => '<a class="chip" href="#/plan/' + d + '">' + DOW[PLAN_BY_DATE[d].dow] + ' ' + fmtDate(d) + ' · ' + byDay[d] + '</a>').join('') + '</div>' +
+      '<div class="row" style="margin-top:12px"><button class="btn primary" data-recalc="1">⟳ Przelicz plan (+1 blok dziennie)</button><button class="btn" data-recalc="2">+2 bloki dziennie</button>' + undo + '</div></div>';
+  }
+  function bindRecalc(rerender) {
+    $$('[data-recalc]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.recalc === 'undo') {
+        S.moved = S.movedPrev || {}; delete S.movedPrev; save();
+        toast('Przywrócono poprzedni plan.');
+      } else {
+        const r = recalcPlan(+b.dataset.recalc);
+        toast('Przeniesiono ' + r.moved + ' ' + plural(r.moved, 'blok', 'bloki', 'bloków') + (r.left ? '. Nie zmieściło się ' + r.left + ' – spróbuj +2 dziennie.' : '.'));
+      }
+      rerender();
+    }));
+  }
+
   function actionsFor(text, dayText) {
     const acts = [];
     const pyt = text.match(/pyt\. ([\d–, ]+\d)/);
@@ -304,12 +368,13 @@
     return acts;
   }
 
-  function blockHTML(p, i, b) {
-    const on = !!S.done[blockKey(p.date, i)];
+  function blockHTML(it) {
+    const on = !!S.done[it.key];
+    const b = it.b, p = it.src;
     const acts = actionsFor(b.text, p.blocks.map(x => x.text).join(' '));
     return '<div class="block' + (on ? ' done' : '') + '">' +
-      '<button class="check' + (on ? ' on' : '') + '" data-check="' + blockKey(p.date, i) + '" aria-pressed="' + on + '" aria-label="Zrobione: ' + esc(b.label) + '">✓</button>' +
-      '<div><div class="txt"><span class="label">' + esc(b.label) + '</span>' + linkRefs(esc(b.text)) + '</div>' +
+      '<button class="check' + (on ? ' on' : '') + '" data-check="' + it.key + '" aria-pressed="' + on + '" aria-label="Zrobione: ' + esc(b.label) + '">✓</button>' +
+      '<div><div class="txt">' + (it.from ? '<span class="moved-tag">przeniesione z ' + DOW[p.dow] + ' ' + fmtDate(it.from) + '</span>' : '') + '<span class="label">' + esc(b.label) + '</span>' + linkRefs(esc(b.text)) + '</div>' +
       '<div class="acts">' + acts.map(a => '<a class="btn sm ' + a[2] + '" href="' + a[1] + '">' + esc(a[0]) + '</a>').join('') +
       '<button class="btn sm ghost" data-timer="' + esc(b.label + ' – ' + fmtDate(p.date)) + '">⏱ 25 min</button></div></div></div>';
   }
@@ -321,6 +386,79 @@
       rerender();
     }));
     $$('[data-timer]', root).forEach(btn => btn.addEventListener('click', () => startTimer(btn.dataset.timer)));
+  }
+
+  // ---------- „Na dziś do powtórki” ----------
+  // Fiszka wraca po 1, 2, 4, 7 lub 14 dniach – zależnie od pudełka.
+  const CARD_INTERVAL = [0, 1, 2, 4, 7, 14];
+  function isoOf(ts) {
+    const d = new Date(ts);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function addDaysISO(iso, n) {
+    const d = new Date(iso + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  function markSeen(n) { (S.qseen || (S.qseen = {}))[n] = Date.now(); }
+  function introducedQs(today) {
+    const set = new Set(Object.keys(S.read).map(Number));
+    const stage1 = PLAN.filter(p => p.stage === 1 && p.blocks.length);
+    if (today > stage1[stage1.length - 1].date) QUESTIONS.forEach(q => set.add(q.n));
+    else stage1.filter(p => p.date <= today).forEach(p => {
+      const m = p.blocks[0].text.match(/pyt\. (\d+)–(\d+)/);
+      if (m) parseRange(m[1] + '–' + m[2]).forEach(n => set.add(n));
+    });
+    return set;
+  }
+  function lastGrade(n) {
+    for (let i = S.exams.length - 1; i >= 0; i--) if (S.exams[i].grades && S.exams[i].grades[n]) return S.exams[i].grades[n];
+    return null;
+  }
+  function reviewToday() {
+    const today = todayISO();
+    const intro = introducedQs(today);
+    const due = CARDS.filter(c => { const st = S.cards[c.id]; return st && st.box && addDaysISO(isoOf(st.t), CARD_INTERVAL[st.box]) <= today; });
+    const fresh = CARDS.filter(c => !cardBox(c.id) && intro.has(c.q)).slice(0, 6);
+    const seen = S.qseen || {};
+    const cands = [];
+    QUESTIONS.forEach(q => {
+      const n = q.n;
+      if (!intro.has(n) && !isWeak(n)) return;
+      const ago = seen[n] ? daysBetween(isoOf(seen[n]), today) : null;
+      const g = lastGrade(n);
+      if (isWeak(n) && (ago === null || ago >= 1)) cands.push({ n, prio: 0, ago, why: '★ słabe pytanie' });
+      else if ((g === 'mid' || g === 'bad') && (ago === null || ago >= 2)) cands.push({ n, prio: 1, ago, why: 'na egzaminie: ' + (g === 'bad' ? '„słabo”' : '„średnio”') });
+      else if (ago === null) cands.push({ n, prio: 2, ago, why: 'jeszcze nie powtarzane' });
+      else if (ago >= 7) cands.push({ n, prio: 3, ago, why: 'nie było od ' + ago + ' dni' });
+    });
+    cands.sort((a, b) => a.prio - b.prio || (b.ago || 99) - (a.ago || 99) || a.n - b.n);
+    return { due, fresh, qs: cands.slice(0, 3) };
+  }
+  function reviewCard(today) {
+    if (today < PLAN[0].date) return '';
+    const r = reviewToday();
+    const nc = r.due.length + r.fresh.length;
+    const done = !nc && !r.qs.length;
+    return '<a class="card review-card" href="#/powtorka"><div class="flame">🔁</div><div><div class="kicker">Na dziś do powtórki</div>' +
+      (done ? '<b>Wszystko na dziś powtórzone ✓</b>' : '<b>' + nc + ' ' + plural(nc, 'fiszka', 'fiszki', 'fiszek') + ' · ' + r.qs.length + ' ' + plural(r.qs.length, 'pytanie', 'pytania', 'pytań') + '</b>') +
+      '<div class="small muted">ok. ' + Math.max(5, Math.round(nc * 0.3 + r.qs.length * 4)) + ' min · dobre na rozgrzewkę przed blokiem</div></div><span class="chev">›</span></a>';
+  }
+  function viewReviewToday() {
+    const r = reviewToday();
+    const nc = r.due.length + r.fresh.length;
+    let html = '<h1>Na dziś do powtórki</h1><p class="muted">Fiszki wracają po 1, 2, 4, 7 i 14 dniach – im dłużej je umiesz, tym rzadziej. Pytania: słabe, ocenione nisko na egzaminie albo dawno niewidziane.</p>';
+    html += '<div class="card"><div class="kicker">Fiszki</div>' + (nc
+      ? '<div class="stat">' + nc + '</div><p class="small muted">' + r.due.length + ' do powtórki · ' + r.fresh.length + ' nowych z przerobionych pytań</p>' +
+        '<div class="row"><a class="btn primary" href="#/fiszki/sesja?review=1&m=terms">◧ Start</a><a class="btn" href="#/fiszki/sesja?review=1&m=quiz">? Jako quiz ABCD</a></div>'
+      : '<p><b>✓ Fiszki na dziś zrobione.</b></p>') + '</div>';
+    html += '<div class="card"><div class="kicker">Pytania egzaminacyjne</div>' + (r.qs.length
+      ? r.qs.map(c => '<div class="rev-q" style="--sec:' + SECTION_COLORS[Q[c.n].sec.id] + '"><div><span class="qnum">' + c.n + '</span> <a href="#/n/' + c.n + '"><b>' + esc(Q[c.n].title) + '</b></a><div class="small muted">' + esc(c.why) + '</div></div>' +
+          '<div class="row"><a class="btn sm primary" href="#/cwicz/' + c.n + '">✎ Z pamięci</a><a class="btn sm" href="#/fiszki/sesja?q=' + c.n + '&m=questions">🗣 Na głos</a><button class="btn sm ok" data-seen="' + c.n + '">✓ Zrobione</button></div></div>').join('')
+      : '<p><b>✓ Pytania na dziś powtórzone.</b></p>') + '</div>';
+    if (!nc && !r.qs.length) html += '<div class="empty">🎉 Na dziś wszystko powtórzone. Możesz zagrać w coś w zakładce <a href="#/gry">Gry</a>.</div>';
+    setView(html);
+    $$('[data-seen]').forEach(b => b.addEventListener('click', () => { markSeen(+b.dataset.seen); save(); viewReviewToday(); }));
   }
 
   // ---------- widoki ----------
@@ -346,12 +484,13 @@
       headline = '<div class="kicker">' + DOW[entry.dow] + ' ' + fmtDate(entry.date) + (entry.nr ? ' · dzień ' + entry.nr + ' z 45' : '') + ' · ' + esc(STAGES[entry.stage]) + '</div><h1>Dziś</h1>';
     }
     let body = '';
-    if (entry && entry.blocks.length) {
-      const nd = dayDone(entry);
-      body += '<div class="card">' + headline +
-        '<div class="row between small muted"><span>' + nd + ' / ' + entry.blocks.length + ' bloków</span><span>3 × 25 min + 5 min przerwy</span></div>' +
-        '<div class="progress ok" style="margin:8px 0 6px"><i style="width:' + (100 * nd / entry.blocks.length) + '%"></i></div>' +
-        entry.blocks.map((b, i) => blockHTML(entry, i, b)).join('') + '</div>';
+    const items = entry ? dayItems(entry) : [];
+    if (entry && items.length) {
+      const nd = itemsDone(items);
+      body += '<div class="card">' + headline + (!entry.blocks.length && entry.note ? '<p class="muted">' + esc(entry.note) + '</p>' : '') +
+        '<div class="row between small muted"><span>' + nd + ' / ' + items.length + ' ' + plural(items.length, 'blok', 'bloki', 'bloków') + '</span><span>' + items.length + ' × 25 min + 5 min przerwy</span></div>' +
+        '<div class="progress ok" style="margin:8px 0 6px"><i style="width:' + (100 * nd / items.length) + '%"></i></div>' +
+        items.map(blockHTML).join('') + '</div>';
     } else if (entry) {
       const next = PLAN.find(p => p.date > entry.date && p.blocks.length);
       body += '<div class="card">' + headline + '<p style="font-size:1.15rem">' + esc(entry.note || '') + '</p>' +
@@ -360,12 +499,8 @@
       body += '<div class="card">' + headline + '</div>';
     }
 
-    // zaległości
-    const overdue = STUDY_DAYS.filter(p => p.date < today && dayDone(p) < p.blocks.length);
-    if (overdue.length) {
-      body += '<div class="card"><h2>Zaległe bloki</h2><p class="muted small">Nic się nie stało – sobota 12.12 to dzień zapasu. Odhacz, jeśli już zrobione.</p><div class="chips">' +
-        overdue.map(p => '<a class="chip" href="#/plan/' + p.date + '">' + DOW[p.dow] + ' ' + fmtDate(p.date) + ' · ' + (p.blocks.length - dayDone(p)) + '</a>').join('') + '</div></div>';
-    }
+    body += reviewCard(today);
+    body += recalcCard(today);
 
     // statystyki
     const db = doneBlocks();
@@ -382,6 +517,7 @@
     setView(body, { keepScroll: viewToday.rendered });
     viewToday.rendered = true;
     bindChecks(view(), viewToday);
+    bindRecalc(viewToday);
   }
   function statCard(title, val, sub, frac, href) {
     return '<a class="card" href="' + href + '" style="text-decoration:none;color:inherit;margin:0">' +
@@ -392,7 +528,7 @@
   function viewPlan(focusDate) {
     const today = todayISO();
     const open = focusDate || (today < PLAN[0].date ? PLAN[0].date : today);
-    let html = '<h1>Plan nauki</h1><p class="muted">26.10 – 16.12 · niedziele wolne · egzamin czw 17.12 · ' + doneBlocks() + ' / ' + TOTAL_BLOCKS + ' bloków</p>';
+    let html = '<h1>Plan nauki</h1><p class="muted">26.10 – 16.12 · niedziele wolne · egzamin czw 17.12 · ' + doneBlocks() + ' / ' + TOTAL_BLOCKS + ' bloków</p>' + recalcCard(today);
     let stage = 0;
     PLAN.forEach(p => {
       if (p.stage !== stage) {
@@ -401,21 +537,24 @@
       }
       const isToday = p.date === today;
       const date = '<div class="d">' + DOW[p.dow] + ' ' + fmtDate(p.date) + '<small>' + (p.nr ? 'dzień ' + p.nr : '&nbsp;') + '</small></div>';
-      if (!p.blocks.length) {
+      const items = dayItems(p);
+      if (!items.length) {
         const isExam = p.date === EXAM_DATE;
         html += '<details class="day ' + (isExam ? 'exam' : 'rest') + (isToday ? ' today' : '') + '" id="d-' + p.date + '"><summary>' + date +
           '<div class="sum">' + esc(p.note) + '</div></summary></details>';
         return;
       }
-      const nd = dayDone(p);
-      const summary = p.blocks.map(b => b.text).join(' · ');
-      html += '<details class="day' + (nd === p.blocks.length ? ' complete' : '') + (isToday ? ' today' : '') + '" id="d-' + p.date + '"' + (p.date === open ? ' open' : '') + '>' +
-        '<summary>' + date + '<div class="sum">' + esc(summary) + '</div><div class="cnt">' + (nd === p.blocks.length ? '✓' : nd + '/' + p.blocks.length) + '</div></summary>' +
-        '<div class="inner">' + p.blocks.map((b, i) => blockHTML(p, i, b)).join('') + '</div></details>';
+      const nd = itemsDone(items);
+      const extra = items.filter(it => it.from).length;
+      const summary = (extra ? '+' + extra + ' przeniesione · ' : '') + items.map(it => it.b.text).join(' · ');
+      html += '<details class="day' + (nd === items.length ? ' complete' : '') + (isToday ? ' today' : '') + '" id="d-' + p.date + '"' + (p.date === open ? ' open' : '') + '>' +
+        '<summary>' + date + '<div class="sum">' + esc(summary) + '</div><div class="cnt">' + (nd === items.length ? '✓' : nd + '/' + items.length) + '</div></summary>' +
+        '<div class="inner">' + items.map(blockHTML).join('') + '</div></details>';
     });
     html += backupCard();
     setView(html);
     bindChecks(view(), () => { const y = window.scrollY; viewPlan(focusDate); window.scrollTo(0, y); });
+    bindRecalc(() => { const y = window.scrollY; viewPlan(focusDate); window.scrollTo(0, y); });
     bindBackup();
     const target = document.getElementById('d-' + open);
     if (target && !viewPlan.scrolled) { target.scrollIntoView({ block: 'center' }); }
@@ -481,7 +620,7 @@
         out += '<div class="sec-h" style="--sec:' + SECTION_COLORS[s.id] + '">' + s.id + '. ' + esc(s.title) + ' <span style="opacity:.8;font-weight:500">(pyt. ' + s.from + '–' + s.to + ')</span></div>' +
           '<div class="card qlist" style="padding:0;--sec:' + SECTION_COLORS[s.id] + '">' + qs.map(q =>
             '<a href="#/n/' + q.n + (query ? '?q=' + encodeURIComponent(query) : '') + '"><span class="qnum">' + q.n + '</span><span>' + esc(q.title) + '</span><span class="flags">' +
-            (isWeak(q.n) ? '<span class="flag-weak" title="słabe">★</span> ' : '') + (S.read[q.n] ? '<span class="flag-read" title="przeczytane">✓</span>' : '') + '</span></a>').join('') + '</div>';
+            (isWeak(q.n) ? '<span class="flag-weak" title="słabe">★</span> ' : '') + (hasMine(q.n) ? '<span class="muted" title="Twoje dopiski">✎</span> ' : '') + (S.read[q.n] ? '<span class="flag-read" title="przeczytane">✓</span>' : '') + '</span></a>').join('') + '</div>';
       });
       $('#qres').innerHTML = out || '<div class="empty">' + (weakOnly ? 'Brak słabych pytań. Dodasz je gwiazdką przy pytaniu albo po próbnym egzaminie.' : 'Nic nie znaleziono.') + '</div>';
     };
@@ -513,7 +652,9 @@
         '<button class="btn sm" data-hide="' + n + '">🙈 Zasłoń</button>' +
         '<a class="btn sm" href="#/cwicz/' + n + '">✎ Napisz z pamięci</a>' +
         (hasCards ? '<a class="btn sm" href="#/fiszki/sesja?q=' + n + '&m=terms">◧ Fiszki</a>' : '') +
-        '</div><div class="card note" id="note' + n + '">' + renderBlocks(q.blocks, query) + '</div></section>';
+        (window.EXTRAS ? window.EXTRAS.diagramsFor(n).map(d => '<a class="btn sm" href="#/gry/schemat/' + d.id + '">🧩 Schemat</a>').join('') +
+          window.EXTRAS.comparisonsFor(n).slice(0, 1).map(c => '<a class="btn sm" href="#/gry/porownaj/' + c.id + '">⚖️ Porównaj</a>').join('') : '') +
+        '</div><div class="card note" id="note' + n + '">' + renderBlocks(q.blocks, query) + '</div>' + mineHTML(n) + '</section>';
     });
     if (single) {
       const n = nums[0];
@@ -525,7 +666,7 @@
     const rerender = () => { const y = window.scrollY; viewQuestion.keep = true; viewQuestion(arg, query); window.scrollTo(0, y); };
     $$('[data-read]').forEach(b => b.addEventListener('click', () => {
       const n = +b.dataset.read;
-      if (S.read[n]) delete S.read[n]; else S.read[n] = Date.now();
+      if (S.read[n]) delete S.read[n]; else { S.read[n] = Date.now(); markSeen(n); }
       save(); rerender();
     }));
     $$('[data-weak]').forEach(b => b.addEventListener('click', () => { toggleWeak(+b.dataset.weak); rerender(); }));
@@ -534,7 +675,42 @@
       const hidden = el.classList.toggle('hidden-note');
       b.textContent = hidden ? '👁 Odsłoń' : '🙈 Zasłoń';
     }));
+    bindMine();
     if (query) { const m = $('mark'); if (m) m.scrollIntoView({ block: 'center' }); }
+  }
+
+  // Własne dopiski do pytania: tekst (też pismem odręcznym przez Scribble) + kartka do rysowania
+  const mine = n => (S.mynotes && S.mynotes[n]) || {};
+  const hasMine = n => !!(mine(n).text || mine(n).ink);
+  function setMine(n, key, val) {
+    S.mynotes = S.mynotes || {};
+    const m = S.mynotes[n] = S.mynotes[n] || {};
+    if (val) m[key] = val; else delete m[key];
+    if (!m.text && !m.ink) delete S.mynotes[n];
+    save();
+  }
+  function mineHTML(n) {
+    const m = mine(n);
+    return '<details class="card mine"' + (hasMine(n) ? ' open' : '') + ' data-minebox="' + n + '"><summary><b>✎ Moje dopiski</b> <span class="small muted">skojarzenia, mnemotechniki, rysunki</span></summary>' +
+      '<textarea data-mine="' + n + '" placeholder="Np. „Ikona – duża i krótka, echo – mniejsze i dłuższe”. Na iPadzie możesz tu pisać rysikiem – pismo zamieni się w tekst.">' + esc(m.text || '') + '</textarea>' +
+      '<div class="kicker" style="margin-top:12px">Kartka do rysowania</div><div data-inkq="' + n + '"></div></details>';
+  }
+  function bindMine() {
+    $$('[data-mine]').forEach(t => {
+      let tm;
+      t.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => setMine(+t.dataset.mine, 'text', t.value.trim() ? t.value : ''), 400); });
+    });
+    $$('[data-minebox]').forEach(box => {
+      const n = +box.dataset.minebox;
+      const mount = () => {
+        const host = $('[data-inkq="' + n + '"]', box);
+        if (!host || host.dataset.ready || !window.EXTRAS) return;
+        host.dataset.ready = '1';
+        window.EXTRAS.mountInk(host, { height: 340, data: mine(n).ink, hint: 'zapisuje się sama', onChange: d => setMine(n, 'ink', d) });
+      };
+      if (box.open) mount();
+      box.addEventListener('toggle', () => { if (box.open) mount(); });
+    });
   }
 
   function viewTables(secId) {
@@ -594,6 +770,11 @@
 
   function buildDeck(params) {
     const mode = params.get('m') || 'terms';
+    if (params.get('review')) {
+      const r = reviewToday();
+      const cards = shuffle(r.due).sort((a, b) => cardBox(a.id) - cardBox(b.id)).concat(r.fresh);
+      return { mode: mode === 'quiz' ? 'quiz' : 'terms', items: cards.map(c => ({ kind: 'c', id: c.id, c })), total: cards.length };
+    }
     let qset = null;
     if (params.get('q')) qset = new Set(parseRange(params.get('q')));
     if (params.get('s')) { const secs = params.get('s').split(','); qset = new Set(QUESTIONS.filter(q => secs.includes(q.sec.id)).map(q => q.n)); }
@@ -645,7 +826,10 @@
     }
     function answer(ok) {
       if (it.kind === 'c') setBox(it.id, ok ? Math.max(2, cardBox(it.id) + 1) : 1);
-      else if (!ok && !isWeak(it.q.n)) { toggleWeak(it.q.n, true); toast('pyt. ' + it.q.n + ' dodane do słabych pytań'); }
+      else {
+        markSeen(it.q.n);
+        if (!ok && !isWeak(it.q.n)) { toggleWeak(it.q.n, true); toast('pyt. ' + it.q.n + ' dodane do słabych pytań'); }
+      }
       if (ok) s.good++; else { s.bad++; if (!s.again.has(it.id)) { s.again.add(it.id); s.items.push(it); } }
       s.i++; s.flipped = false;
       viewSession(params);
@@ -759,9 +943,18 @@
     setView('<div class="row between"><a class="btn sm ghost" href="' + back + '">‹ Wróć</a><span class="big-timer" id="et"></span></div>' +
       ex.qs.map(n => '<div class="card exam-q" style="--accent:' + SECTION_COLORS[Q[n].sec.id] + '"><div style="margin-bottom:10px"><span class="qnum" style="--sec:' + SECTION_COLORS[Q[n].sec.id] + '">' + n + '</span> <b>' + esc(Q[n].title) + '</b></div>' +
         (ex.hints === false ? '' : todoHTML(ex, n)) +
-        '<textarea data-ans="' + n + '" placeholder="Pisz pełnymi zdaniami: definicja, autor, badanie, porównanie…" autocapitalize="sentences" spellcheck="true">' + esc(ex.answers[n] || '') + '</textarea></div>').join('') +
+        '<textarea data-ans="' + n + '" placeholder="Pisz pełnymi zdaniami: definicja, autor, badanie, porównanie… (na iPadzie możesz pisać rysikiem)" autocapitalize="sentences" spellcheck="true">' + esc(ex.answers[n] || '') + '</textarea>' +
+        '<details class="sketch" data-sketch="' + n + '"><summary class="small">✏️ Kartka na szkic lub schemat (nie jest oceniana)</summary><div></div></details></div>').join('') +
       '<div class="row"><button class="btn primary" id="fin">Zakończ i sprawdź z notatką</button></div><p class="small muted">Odpowiedzi zapisują się na bieżąco – możesz zamknąć aplikację i wrócić.</p>');
     $$('[data-ans]').forEach(t => t.addEventListener('input', () => { ex.answers[t.dataset.ans] = t.value; save(); }));
+    $$('[data-sketch]').forEach(d => d.addEventListener('toggle', () => {
+      const host = $('div', d);
+      if (!d.open || host.dataset.ready || !window.EXTRAS) return;
+      host.dataset.ready = '1';
+      const n = d.dataset.sketch;
+      const store = viewWrite.sketch || (viewWrite.sketch = {});
+      window.EXTRAS.mountInk(host, { height: 320, data: store[n], hint: 'tylko na czas pisania', onChange: v => { store[n] = v; } });
+    }));
     $$('[data-todo]').forEach(li => li.addEventListener('click', () => {
       const [n, i] = li.dataset.todo.split(':').map(Number);
       ex.ticks = ex.ticks || {};
@@ -835,7 +1028,9 @@
         cov.res.map(r => '<span class="term ' + (r.hit ? 'hit' : 'miss') + '">' + (r.hit ? '✓ ' : '✗ ') + esc(r.t) + '</span>').join('') + '</div>' +
         '<p class="small muted" style="margin:8px 0 0">Wykrywanie jest przybliżone (odmiana słów) – traktuj jako podpowiedź, nie ocenę.</p></details>' +
         '<div class="compare"><div><div class="kicker">Twoja odpowiedź</div><div class="my-answer">' + (esc(ex.answers[n] || '').trim() || '<span class="muted">(pusto)</span>') + '</div></div>' +
-        '<div><div class="kicker">Notatka</div><div class="note">' + renderBlocks(q.blocks) + '</div></div></div>' +
+        '<div><div class="kicker">Notatka</div><div class="note">' + renderBlocks(q.blocks) + '</div>' +
+        (hasMine(n) ? '<div class="kicker" style="margin-top:12px">Twoje dopiski</div>' + (mine(n).text ? '<div class="my-answer">' + esc(mine(n).text) + '</div>' : '') +
+          (mine(n).ink ? '<img class="ink-preview" src="' + mine(n).ink + '" alt="Twój rysunek">' : '') : '') + '</div></div>' +
         '<div class="kicker" style="margin-top:14px">Jak poszło?</div><div class="grade-btns">' +
         [['ok', '🟢 Dobrze', 'ok'], ['mid', '🟡 Średnio', 'mid'], ['bad', '🔴 Słabo', 'bad']].map(b => '<button class="btn ' + b[2] + (g === b[0] ? ' sel' : '') + '" data-grade="' + n + ':' + b[0] + '">' + b[1] + '</button>').join('') +
         '</div></div>';
@@ -853,6 +1048,7 @@
       const cov = {};
       ex.qs.forEach(n => {
         cov[n] = termCoverage(Q[n], ex.answers[n]).pct;
+        markSeen(n);
         if (ex.grades[n] === 'ok') toggleWeak(n, false); else toggleWeak(n, true);
       });
       S.exams.push({ date: todayISO(), kind: ex.kind, range: ex.range, qs: ex.qs, grades: ex.grades, cov, answers: ex.answers });
@@ -923,7 +1119,7 @@
     const [path, qs] = hash.slice(1).split('?');
     const params = new URLSearchParams(qs || '');
     const parts = path.split('/').filter(Boolean);
-    const tab = { dzis: 'dzis', plan: 'plan', notatki: 'notatki', n: 'notatki', tabele: 'notatki', fiszki: 'fiszki', egzamin: 'egzamin', cwicz: 'egzamin', gry: 'gry' }[parts[0]] || 'dzis';
+    const tab = { powtorka: 'dzis', dzis: 'dzis', plan: 'plan', notatki: 'notatki', n: 'notatki', tabele: 'notatki', fiszki: 'fiszki', egzamin: 'egzamin', cwicz: 'egzamin', gry: 'gry' }[parts[0]] || 'dzis';
     $$('.tabbar a').forEach(a => a.classList.toggle('active', a.dataset.tab === tab));
     if (parts[0] !== 'fiszki' || parts[1] !== 'sesja') session = null;
     switch (parts[0]) {
@@ -939,6 +1135,7 @@
         else viewExamHome();
         break;
       case 'cwicz': newPractice(+parts[1]); break;
+      case 'powtorka': viewReviewToday(); break;
       case 'gry': window.GAMES ? window.GAMES.view(parts.slice(1), params) : viewToday(); break;
       default: viewToday();
     }

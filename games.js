@@ -15,6 +15,8 @@
     { id: 'tabela', icon: '▤', name: 'Puzzle z tabeli', desc: 'Rozłóż komórki do właściwych kolumn.', best: null },
     { id: 'pary', icon: '⚡', name: 'Dopasuj pary', desc: '6 terminów i 6 definicji na czas.', best: b => b + ' s' },
     { id: 'pf', icon: '⚖', name: 'Prawda czy fałsz', desc: '60 sekund, pułapki z notatki.', best: b => b + ' pkt' },
+    { id: 'schemat', icon: '🧩', name: 'Uzupełnij schemat', desc: 'Modele z notatki z zasłoniętymi podpisami – kafelki albo rysik.', best: null },
+    { id: 'porownaj', icon: '⚖️', name: 'Porównaj X i Y', desc: 'Teorie, które łatwo pomylić – pisz rysikiem, potem sprawdź tabelę.', best: null },
     { id: 'losuj', icon: '🎲', name: 'Losownik pytań', desc: 'Wylosuj 3 pytania na próbny egzamin.', best: null }
   ];
 
@@ -130,6 +132,8 @@
         let best = '';
         if (x.id === 'kolejnosc') { const ok = GD.sequences.filter((_, i) => g.seq[i] === 0).length; best = ok + ' / ' + GD.sequences.length + ' bez błędu'; }
         else if (x.id === 'tabela') { const ok = Object.values(g.tables).filter(v => v === 0).length; best = ok ? ok + ' bez błędu' : ''; }
+        else if (x.id === 'schemat') { const ok = Object.values(g.diagrams || {}).filter(v => v === 0).length; best = ok ? ok + ' bez błędu' : ''; }
+        else if (x.id === 'porownaj') { const v = Object.values(g.compare || {}); best = v.length ? v.length + ' zrobione, śr. ' + Math.round(v.reduce((a, b) => a + b, 0) / v.length) + '%' : ''; }
         else if (x.best && g.best[x.id] != null) best = 'rekord: ' + x.best(g.best[x.id]);
         return '<a class="card tile game-tile" href="#/gry/' + x.id + '"><div class="stat">' + x.icon + '</div><b>' + x.name + '</b><div class="small muted">' + x.desc + '</div>' +
           (best ? '<div class="small best">' + best + '</div>' : '') + '</a>';
@@ -670,9 +674,11 @@
       case 'pary': viewPairs(); break;
       case 'pf': viewTF(); break;
       case 'losuj': viewDraw(); break;
+      case 'schemat': window.EXTRAS.diagram(arg); break;
+      case 'porownaj': window.EXTRAS.compare(arg); break;
       default: viewHome();
     }
   }
 
-  window.GAMES = { view, todayCard, checkBadges, streak };
+  window.GAMES = { view, todayCard, checkBadges, streak, scopePicker, bindScope, inScope };
 })();

@@ -386,3 +386,57 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 .range-row { gap: 8px; }
 .range-row input { width: 84px; min-height: 40px; text-align: center; }
 .big-start { width: 100%; min-height: 56px; font-size: 1.1rem; margin-bottom: 14px; }
+
+/* ---------- kartka do rysowania (rysik) ---------- */
+.ink-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.ink-color { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--surface); background: var(--c); box-shadow: 0 0 0 1px var(--border); cursor: pointer; padding: 0; }
+.ink-color.on { box-shadow: 0 0 0 3px var(--accent); }
+.ink-btn { min-width: 40px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 1rem; }
+.ink-btn.on { background: var(--accent-soft); border-color: var(--accent); }
+.ink-hint { font-size: .78rem; color: var(--muted); margin-left: auto; }
+.ink-canvas {
+  display: block; width: 100%; touch-action: none; border-radius: 12px; border: 1px solid var(--border); cursor: crosshair;
+  background-color: #fffef8;
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 31px, #e3e8ef 31px, #e3e8ef 32px);
+}
+.ink-preview { display: block; max-width: 100%; border: 1px solid var(--border); border-radius: 10px; background: #fffef8; margin: 6px 0 14px; }
+details.mine > summary, details.sketch > summary { cursor: pointer; padding: 4px 0; }
+details.mine textarea { min-height: 110px; margin-top: 10px; }
+details.sketch { margin-top: 10px; }
+details.sketch > div { margin-top: 8px; }
+
+/* ---------- schematy ---------- */
+.dia-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.dia { position: relative; width: 100%; min-width: 600px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.dia-edges { position: absolute; inset: 0; color: var(--muted); pointer-events: none; overflow: visible; }
+.dia-edges line { stroke: currentColor; stroke-width: 2; }
+.dia-edges text { fill: var(--muted); font-size: 12px; font-style: italic; }
+.dia-node {
+  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center;
+  background: var(--surface); border: 2px solid var(--sec, var(--accent)); border-radius: 12px; padding: 4px 6px; font-size: .88rem; line-height: 1.2; overflow: hidden;
+}
+.dia-node small { color: var(--muted); font-size: .72rem; line-height: 1.2; }
+.dia-node.nest { justify-content: flex-start; background: color-mix(in srgb, var(--sec, var(--accent)) 7%, var(--surface)); padding-top: 8px; }
+.dia-node.hole { border-style: dashed; cursor: pointer; }
+.dia-node.ok { background: var(--ok-soft); border-color: var(--ok); }
+.dia-node.nest.ok { background: color-mix(in srgb, var(--ok) 10%, var(--surface)); }
+.dia-node.shown { background: var(--mid-soft); border-color: var(--mid); }
+.dia-node.wrong { border-color: var(--bad); background: var(--bad-soft); }
+.dia-slot { font-weight: 800; color: var(--muted); font-size: 1.1rem; }
+.dia-slot.ready { color: var(--accent); }
+.dia-input { width: 92%; min-height: 34px; padding: 4px 6px; font-size: 16px; text-align: center; border-radius: 8px; }
+.dia-input.bad { border-color: var(--bad); background: var(--bad-soft); }
+
+/* ---------- porównania ---------- */
+.cmp tr { cursor: pointer; }
+.cmp tr.got td { background: var(--ok-soft) !important; }
+.cmp td.tick { width: 34px; text-align: center; font-weight: 800; color: var(--ok); }
+
+/* ---------- powtórki i plan ---------- */
+.review-card { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; text-decoration: none; color: inherit; border-color: var(--accent); }
+.review-card .flame { font-size: 2rem; text-align: center; }
+.review-card .chev { font-size: 1.6rem; color: var(--muted); }
+.rev-q { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); }
+.rev-q:first-of-type { border-top: 0; }
+.rev-q a { color: var(--text); text-decoration: none; }
+.moved-tag { display: inline-block; font-size: .75rem; font-weight: 700; color: var(--mid); background: var(--mid-soft); border-radius: 6px; padding: 1px 6px; margin-right: 6px; }
