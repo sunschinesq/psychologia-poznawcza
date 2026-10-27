@@ -12,7 +12,7 @@ Prosta aplikacja webowa do nauki na egzamin warunkowy (czw 17.12.2026). Działa 
 - **Na dziś do powtórki**: codzienna porcja – fiszki wracają po 1, 2, 4, 7 i 14 dniach, a pytania wybierane są spośród słabych, nisko ocenionych na egzaminie i dawno niewidzianych.
 - **Przeliczanie planu**: zaległe bloki jednym przyciskiem trafiają na kolejne dni (+1 lub +2 dziennie) i na dzień zapasu 12.12; można to cofnąć.
 - **Moje dopiski**: przy każdym pytaniu własny tekst i kartka do rysowania rysikiem (Apple Pencil, z naciskiem). Rysunek zapisuje się sam.
-- **Gry**: uzupełnij lukę, kto to powiedział, ułóż w kolejności, puzzle z tabeli, dopasuj pary na czas, prawda czy fałsz (60 s) losownik pytań na próbny egzamin, uzupełnianie schematów (13 modeli, kafelki albo pisanie rysikiem) i „Porównaj X i Y” (12 zestawień teorii). Do tego seria dni nauki (niedziele jej nie przerywają) i odznaki. Treść gier „Ułóż w kolejności” i „Prawda czy fałsz” jest w `games-data.js`, a schematów i porównań – w `extras-data.js`. Pozostałe gry biorą materiał z notatki.
+- **Gry**: uzupełnij lukę, kto to powiedział, ułóż w kolejności, puzzle z tabeli, dopasuj pary na czas, prawda czy fałsz (60 s), losownik pytań na próbny egzamin, uzupełnianie schematów (13 modeli, kafelki albo pisanie rysikiem) i „Porównaj X i Y” (12 zestawień teorii). Do tego seria dni nauki (niedziele jej nie przerywają) i odznaki. Treść gier „Ułóż w kolejności” i „Prawda czy fałsz” jest w `games-data.js`, a schematów i porównań – w `extras-data.js`. Pozostałe gry biorą materiał z notatki.
 
 ## Jak otworzyć na iPadzie
 
