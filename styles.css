@@ -329,3 +329,53 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 .todo li.miss .box { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
 .todo li.self .box { color: var(--muted); }
 .todo.review li { cursor: default; }
+
+/* ---------- gry ---------- */
+.streak-card { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; text-decoration: none; color: inherit; }
+.streak-card .flame { font-size: 2.3rem; line-height: 1; }
+.streak-card .stat { font-size: 1.4rem; }
+.badge-count { text-align: center; display: flex; flex-direction: column; }
+.badge-count b { font-size: 1.5rem; color: var(--navy); }
+.game-tile { text-decoration: none; color: inherit; }
+.best { color: var(--ok); font-weight: 700; margin-top: 6px; }
+.badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.badge { background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; padding: 12px; text-align: center; display: flex; flex-direction: column; gap: 3px; opacity: .55; filter: grayscale(1); }
+.badge.on { opacity: 1; filter: none; border-style: solid; border-color: var(--yellow); box-shadow: var(--shadow); }
+.badge .bicon { font-size: 1.8rem; }
+.badge b { font-size: .92rem; }
+.badge span { font-size: .78rem; color: var(--muted); }
+.badge .when { color: var(--ok); font-weight: 700; }
+.big-q { font-size: 1.2rem; line-height: 1.5; margin: 0; }
+.cloze { font-size: 1.12rem; line-height: 1.6; }
+.cloze .gap { display: inline-block; min-width: 90px; border-bottom: 3px solid var(--accent); color: var(--accent); font-weight: 700; text-align: center; }
+.cloze .okt { color: var(--ok); }
+.cloze .badt { color: var(--bad); text-decoration: underline wavy; }
+.seq-done { margin: 0 0 16px; padding-left: 28px; }
+.seq-done li { padding: 8px 12px; margin-bottom: 6px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.seq-done li.next { background: var(--surface-2); color: var(--muted); }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+.shake { animation: shake .3s; }
+.puzzle table { min-width: 520px; }
+.puzzle td.crit { font-weight: 700; }
+.puzzle td.slot { min-width: 120px; height: 48px; cursor: pointer; border: 2px dashed var(--border); color: var(--muted); text-align: center; vertical-align: middle; }
+.puzzle td.slot.filled { border-style: solid; border-color: var(--ok); background: var(--ok-soft); color: var(--text); text-align: left; cursor: default; }
+.puzzle td.slot.wrong { border-color: var(--bad); background: var(--bad-soft); }
+.pool { display: flex; flex-wrap: wrap; gap: 8px; }
+.pool .chip { border-radius: 10px; text-align: left; min-height: 44px; }
+.pairs { display: grid; grid-template-columns: 1fr 1.6fr; gap: 12px; }
+.pairs > div { display: flex; flex-direction: column; gap: 8px; }
+.pair { justify-content: flex-start; text-align: left; min-height: 56px; line-height: 1.35; white-space: normal; }
+.pair.def { font-weight: 500; font-size: .9rem; }
+.pair.sel { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent) inset; }
+.pair.done, .pair.done[disabled] { opacity: .5; background: var(--ok-soft); border-color: var(--ok); }
+.pair.wrong { background: var(--bad-soft); border-color: var(--bad); }
+.tf-card { min-height: 180px; display: flex; align-items: center; transition: background .2s; }
+.tf-card.flash-ok { background: var(--ok-soft); }
+.tf-card.flash-bad { background: var(--bad-soft); }
+.slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.slot-n { background: var(--surface); border: 2px solid var(--border); border-radius: 16px; text-align: center; font-size: 2.6rem; font-weight: 800; color: var(--navy); padding: 18px 0; font-variant-numeric: tabular-nums; }
+.slot-n.stop { border-color: var(--accent); }
+@media (max-width: 520px) {
+  .tabbar a { font-size: .7rem; }
+  .pairs { grid-template-columns: 1fr; }
+}

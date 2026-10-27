@@ -47,7 +47,7 @@
   }
 
   // ---------- stan ----------
-  const defaults = () => ({ done: {}, read: {}, weak: [], cards: {}, exams: [], exam: null, practice: null, timer: null, drafts: {} });
+  const defaults = () => ({ done: {}, read: {}, weak: [], cards: {}, exams: [], exam: null, practice: null, timer: null, drafts: {}, games: {}, activity: {}, badges: {} });
   let S = load();
   function load() {
     try {
@@ -56,6 +56,11 @@
     } catch (e) { return defaults(); }
   }
   function save() {
+    S.activity[todayISO()] = 1;
+    persist();
+  }
+  // zapis bez oznaczania dnia jako aktywnego (np. przyznanie odznaki)
+  function persist() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); }
     catch (e) { toast('Nie udało się zapisać postępu (pamięć przeglądarki).'); }
   }
@@ -366,6 +371,7 @@
     const db = doneBlocks();
     const read = Object.keys(S.read).length;
     const mastered = CARDS.filter(c => cardBox(c.id) >= 4).length;
+    if (window.GAMES) body += window.GAMES.todayCard();
     body += '<div class="grid2">' +
       statCard('Plan', db + ' / ' + TOTAL_BLOCKS, 'bloków zrobionych', db / TOTAL_BLOCKS, '#/plan') +
       statCard('Notatki', read + ' / 72', 'pytań przeczytanych', read / 72, '#/notatki') +
@@ -715,9 +721,12 @@
     else { const m = String(arg).match(/^(\d+)-(\d+)$/); pool = m ? parseRange(m[1] + '–' + m[2]) : parseRange('1–72'); }
     if (S.exam && !confirm('Masz rozpoczęty egzamin. Zacząć nowy (stary zostanie porzucony)?')) { location.hash = '#/egzamin/pisz'; return; }
     const qs = shuffle(pool).slice(0, 3).sort((a, b) => a - b);
-    S.exam = { kind: 'exam', range: arg === 'slabe' ? 'słabe pytania' : 'pyt. ' + String(arg).replace('-', '–'), qs, answers: {}, start: null, limitMin: 15 * qs.length, phase: 'draw', grades: {} };
+    startExamWith(qs, arg === 'slabe' ? 'słabe pytania' : 'pyt. ' + String(arg).replace('-', '–'), true);
+  }
+  function startExamWith(qs, range, replace) {
+    S.exam = { kind: 'exam', range, qs, answers: {}, start: null, limitMin: 15 * qs.length, phase: 'draw', grades: {} };
     save();
-    location.replace('#/egzamin/pisz');
+    if (replace) location.replace('#/egzamin/pisz'); else location.hash = '#/egzamin/pisz';
   }
   function newPractice(n) {
     if (!S.practice || S.practice.qs[0] !== n || S.practice.phase === 'done') {
@@ -914,7 +923,7 @@
     const [path, qs] = hash.slice(1).split('?');
     const params = new URLSearchParams(qs || '');
     const parts = path.split('/').filter(Boolean);
-    const tab = { dzis: 'dzis', plan: 'plan', notatki: 'notatki', n: 'notatki', tabele: 'notatki', fiszki: 'fiszki', egzamin: 'egzamin', cwicz: 'egzamin' }[parts[0]] || 'dzis';
+    const tab = { dzis: 'dzis', plan: 'plan', notatki: 'notatki', n: 'notatki', tabele: 'notatki', fiszki: 'fiszki', egzamin: 'egzamin', cwicz: 'egzamin', gry: 'gry' }[parts[0]] || 'dzis';
     $$('.tabbar a').forEach(a => a.classList.toggle('active', a.dataset.tab === tab));
     if (parts[0] !== 'fiszki' || parts[1] !== 'sesja') session = null;
     switch (parts[0]) {
@@ -930,10 +939,20 @@
         else viewExamHome();
         break;
       case 'cwicz': newPractice(+parts[1]); break;
+      case 'gry': window.GAMES ? window.GAMES.view(parts.slice(1), params) : viewToday(); break;
       default: viewToday();
     }
     drawCountdown();
+    if (window.GAMES) window.GAMES.checkBadges();
   }
+  // ---------- API dla gier (games.js) ----------
+  window.PP = {
+    NOTES, PLAN, CARDS, Q, QUESTIONS, SECTION_COLORS, STUDY_DAYS, EXAM_DATE,
+    get S() { return S; },
+    save, persist, esc, shuffle, plainText, setView, toast, renderBlocks, linkRefs, todayISO, fmtDate, fmtMin, plural,
+    cardBox, setBox, dayDone, doneBlocks, TOTAL_BLOCKS, startExamWith, parseRange
+  };
+
   window.addEventListener('hashchange', () => { viewToday.rendered = false; route(); });
   route();
   drawTimer();
