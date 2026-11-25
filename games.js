@@ -528,7 +528,7 @@
       if (nAvail >= 3) $('#go').addEventListener('click', () => {
         const seen = new Set();
         const cards = P.shuffle(avail).filter(c => { const k = c.term.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
-        const defs = cards.map(c => { let d = P.plainText(c.def); if (d.length > 130) d = d.slice(0, 127) + '…'; return { id: c.id, d }; });
+        const defs = cards.map(c => { let d = P.plainText(c.def); if (d.length > 190) d = d.slice(0, 187) + '…'; return { id: c.id, d }; });
         pr = { cards, left: P.shuffle(cards.map(c => c.id)), right: P.shuffle(defs), matched: new Set(), selL: null, selR: null, mistakes: 0, start: Date.now(), flash: [] };
         viewPairs();
       });

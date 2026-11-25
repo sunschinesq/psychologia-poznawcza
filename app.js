@@ -5,7 +5,8 @@
   const DATA = window.APP_DATA;
   const NOTES = DATA.notes;
   const PLAN = DATA.plan;
-  const CARDS = DATA.cards;
+  // fiszki napisane ręcznie (cards-data.js); stare, generowane z PDF – tylko awaryjnie
+  const CARDS = window.CARDS_DATA || DATA.cards;
   const EXAM_DATE = '2026-12-17';
   const STORE_KEY = 'poznawcza-v1';
   const SECTION_COLORS = {
@@ -29,7 +30,7 @@
     Q[q.n] = q;
   }));
   const CARD_BY_ID = {};
-  CARDS.forEach(c => { CARD_BY_ID[c.id] = c; });
+  CARDS.forEach(c => { if (!c.s && Q[c.q]) c.s = Q[c.q].sec.id; CARD_BY_ID[c.id] = c; });
   const APPENDIX = {
     szkielet: { title: 'Jak pisać odpowiedź (szkielet)', blocks: NOTES.intro },
     sciaga: { title: 'Ściąga – kto co powiedział', blocks: findAppendix('Ściąga') },
@@ -886,7 +887,7 @@
     CARDS.forEach(c => { const b = cardBox(c.id); if (b) boxes[b - 1]++; });
     const fresh = CARDS.filter(c => !cardBox(c.id)).length;
     const sel = viewCardsHome.sel || (viewCardsHome.sel = new Set());
-    let html = '<h1>Fiszki</h1><p class="muted">' + CARDS.length + ' fiszek „termin → definicja” z pogrubionych pojęć w notatce oraz 72 pytania egzaminacyjne.</p>' +
+    let html = '<h1>Fiszki</h1><p class="muted">' + CARDS.length + ' fiszek „termin → definicja” (wszystkie pojęcia z notatki, z poprawkami z części „Niejasności”) oraz 72 pytania egzaminacyjne.</p>' +
       '<div class="card"><div class="kicker">Twoje pudełka (system Leitnera)</div><div class="boxes">' +
       boxes.map((n, i) => '<div><b>' + n + '</b>' + (i === 0 ? 'nie umiem' : (i === 4 ? '4+' : i) + '× umiem') + '</div>').join('') +
       '</div><p class="small muted" style="margin:10px 0 0">Nowych: ' + fresh + '. Fiszki z niższych pudełek pojawiają się w sesji jako pierwsze.</p></div>' +
@@ -959,7 +960,7 @@
       const q = Q[it.c.q];
       ctx = 'pyt. ' + q.n + ' · ' + esc(q.title);
       front = esc(it.c.term);
-      back = '<div class="note">' + it.c.def + '</div>';
+      back = '<div class="note">' + (window.CARDS_DATA ? esc(it.c.def) : it.c.def) + '</div>';
     }
     setView(head + '<div class="card fc' + cls + '" id="fc"><div class="ctx">' + ctx + '</div><div class="front">' + front + '</div>' +
       (s.flipped ? '<div class="back">' + back + '</div>' : '<div class="hint">' + (it.kind === 'q' ? 'Odpowiedz na głos (ok. 2 min), potem dotknij, by sprawdzić' : 'Dotknij, by odwrócić') + '</div>') + '</div>' +

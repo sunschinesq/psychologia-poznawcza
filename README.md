@@ -7,7 +7,7 @@ Prosta aplikacja webowa do nauki na egzamin warunkowy (czw 17.12.2026). Działa 
 - **Dziś**: zadania z planu na bieżący dzień (3 bloki po 25 min), odhaczanie, minutnik 25 + 5 min, zaległości i postęp.
 - **Plan**: wszystkie 45 dni nauki (26.10–17.12) w podziale na 3 etapy.
 - **Notatki**: 72 zagadnienia w 8 działach, z kolorami jak w PDF (czerwone = definicje, żółte = przykłady i badania, zielone = porównania, szare = dopiski). Do tego wyszukiwarka, gwiazdka „słabe pytanie”, przycisk „zasłoń” do odpytywania się, ściąga, pytania kontrolne i tabele do odtwarzania z pamięci.
-- **Fiszki**: 106 fiszek „termin → definicja” z pogrubionych pojęć, quiz ABCD i 72 pytania egzaminacyjne. Fiszki układają się w pudełka Leitnera.
+- **Fiszki**: 268 fiszek „termin → definicja” napisanych ręcznie na podstawie notatki (źródło: `tools/cards_source.py`, budowanie: `python3 tools/build_cards.py`), quiz ABCD i 72 pytania egzaminacyjne. Fiszki układają się w pudełka Leitnera.
 - **Egzamin**: losowanie 3 pytań z wybranego zakresu, 15 min na pytanie, pisanie odpowiedzi, a potem porównanie z notatką i lista kluczowych terminów, których zabrakło. Pytania ocenione na „średnio” albo „słabo” trafiają na listę słabych pytań.
 - **Na dziś do powtórki**: codzienna porcja – fiszki wracają po 1, 2, 4, 7 i 14 dniach, a pytania wybierane są spośród słabych, nisko ocenionych na egzaminie i dawno niewidzianych.
 - **Przeliczanie planu**: zaległe bloki jednym przyciskiem trafiają na kolejne dni (+1 lub +2 dziennie) i na dzień zapasu 12.12; można to cofnąć.
