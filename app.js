@@ -311,7 +311,7 @@
     over.forEach(it => { byDay[it.at] = (byDay[it.at] || 0) + 1; });
     return '<div class="card"><h2>Zaległe bloki: ' + over.length + '</h2><p class="muted small">Nic się nie stało. Możesz je odhaczyć, jeśli są zrobione, albo przeliczyć plan – zaległości trafią jako dodatkowe bloki na najbliższe dni i na dzień zapasu (sob 12.12). Etap 3 (14–16.12) zostaje bez zmian.</p><div class="chips">' +
       Object.keys(byDay).map(d => '<a class="chip" href="#/plan/' + d + '">' + DOW[PLAN_BY_DATE[d].dow] + ' ' + fmtDate(d) + ' · ' + byDay[d] + '</a>').join('') + '</div>' +
-      '<div class="row" style="margin-top:12px"><button class="btn primary" data-recalc="1">⟳ Przelicz plan (+1 blok dziennie)</button><button class="btn" data-recalc="2">+2 bloki dziennie</button>' + undo + '</div></div>';
+      '<div class="row" style="margin-top:12px"><a class="btn primary" href="#/nadrabiam">🐢 Nadrabiam po kolei</a><button class="btn" data-recalc="1">⟳ Przelicz plan (+1 blok dziennie)</button><button class="btn" data-recalc="2">+2 bloki dziennie</button>' + undo + '</div></div>';
   }
   function bindRecalc(rerender) {
     $$('[data-recalc]').forEach(b => b.addEventListener('click', () => {
@@ -328,7 +328,7 @@
 
   function actionsFor(text, dayText) {
     const acts = [];
-    const pyt = text.match(/pyt\. ([\d–, ]+\d)/);
+    const pyt = text.match(/pyt\. ([\d–, ]*\d)/);
     const ranges = pyt ? pyt[1].split(',').map(s => s.trim()).filter(Boolean) : [];
     const nums = ranges.map(parseRange);
     const isWrite = /napisz z pamięci/.test(text);
@@ -386,6 +386,151 @@
       rerender();
     }));
     $$('[data-timer]', root).forEach(btn => btn.addEventListener('click', () => startTimer(btn.dataset.timer)));
+  }
+
+  // ---------- „🐢 Nadrabiam po kolei” ----------
+  // Zaległe bloki od najstarszego, po jednym, w lżejszej wersji. Nic nie jest przenoszone w planie.
+  // S.catchLater – klucze bloków odłożonych na koniec; S.catchStart – klucze z kolejki od startu (do paska postępu).
+  function catchQueue(today) {
+    const later = S.catchLater || [];
+    const over = overdueItems(today);
+    const first = over.filter(it => !later.includes(it.key));
+    const last = later.map(k => over.find(it => it.key === k)).filter(Boolean);
+    return first.concat(last);
+  }
+  function pytRanges(text) {
+    const m = text.match(/pyt\. ([\d–, ]*\d)/);
+    return m ? m[1].split(',').map(x => parseRange(x.trim())).filter(r => r.length) : [];
+  }
+  const rangeHref = r => r[0] + (r.length > 1 ? '-' + r[r.length - 1] : '');
+  function lightFor(it) {
+    const t = it.b.text;
+    const dayText = it.src.blocks.map(x => x.text).join(' ');
+    const ranges = pytRanges(t);
+    const qLabel = ranges.map(rangeLabel).join(', ');
+    if (/PRÓBNY EGZAMIN|sprawdź odpowiedzi z notatką/.test(t)) return {
+      icon: '✎', min: 5, skip: true,
+      steps: ['Ten blok możesz pominąć – teraz liczą się podstawy, próbny egzamin zrobisz, gdy nadrobisz zaległości.', 'Jeśli masz siłę: wylosuj jedno pytanie i opowiedz je na głos, bez pisania.'],
+      acts: [['🎲 Losownik', '#/gry/losuj', ''], ['🗣 Losowe pytanie na głos', '#/fiszki/sesja?m=questions', '']]
+    };
+    if (/przepisz z pamięci tabele/.test(t)) {
+      const sec = (dayText.match(/Dział(?:y)? ([IVX]+)/) || [])[1];
+      return {
+        icon: '▤', min: 5, skip: true,
+        steps: ['Tylko przejrzyj tabele' + (sec ? ' z działu ' + sec : '') + ' – bez przepisywania.'],
+        acts: [['▤ Tabele' + (sec ? ' działu ' + sec : ''), '#/tabele' + (sec ? '/' + sec : ''), 'primary']]
+      };
+    }
+    if (/napisz z pamięci/.test(t) && ranges.length) {
+      const n = ranges[0][0];
+      return {
+        icon: '🗣', min: 10,
+        steps: ['Przeczytaj jeszcze raz notatkę do pyt. ' + n + '.', 'Zamknij ją i powiedz na głos 3–4 zdania (definicja, autor, badanie) – bez pisania.'],
+        acts: [['📖 Notatka pyt. ' + n, '#/n/' + n, 'primary'], ['🗣 Na głos', '#/fiszki/sesja?q=' + n + '&m=questions', '']]
+      };
+    }
+    if (/przeczytaj w notatce pyt\./.test(t) && ranges.length) {
+      const r = ranges[0];
+      return {
+        icon: '📖', min: 15,
+        steps: ['Przeczytaj w notatce pyt. ' + rangeLabel(r) + ' – tylko pogrubione terminy i czerwone definicje (●).', 'Zrób jedną rundę fiszek z tych pytań.'],
+        acts: [['📖 Notatka pyt. ' + rangeLabel(r), '#/n/' + rangeHref(r), 'primary'], ['◧ Fiszki pyt. ' + rangeLabel(r), '#/fiszki/sesja?q=' + rangeHref(r) + '&m=terms', '']]
+      };
+    }
+    const secM = t.match(/Dział(?:y)? ([IVX]+)(?:–([IVX]+))?/);
+    if (secM && /fiszki|quiz/.test(t)) {
+      const ids = NOTES.sections.map(x => x.id);
+      const a = ids.indexOf(secM[1]), b = secM[2] ? ids.indexOf(secM[2]) : a;
+      const secs = ids.slice(a, b + 1);
+      return {
+        icon: '◧', min: 15,
+        steps: ['Zrób same fiszki z ' + (secs.length > 1 ? 'działów ' + secs.join('–') : 'działu ' + secs[0]) + ' (termin → definicja).', 'Quiz ABCD możesz pominąć.'],
+        acts: [['◧ Fiszki ' + secs.join('–'), '#/fiszki/sesja?s=' + secs.join(',') + '&m=terms', 'primary'], ['? Quiz (opcjonalnie)', '#/fiszki/sesja?s=' + secs.join(',') + '&m=quiz', '']]
+      };
+    }
+    if (/powtórka na głos|powiedz na głos/.test(t)) return {
+      icon: '🔁', min: 5, skip: true,
+      steps: ['Szybka runda fiszek z pyt. ' + qLabel + ' – albo pomiń: te pytania wrócą w „Na dziś do powtórki”.'],
+      acts: ranges.length ? [['◧ Szybkie fiszki', '#/fiszki/sesja?q=' + ranges.map(rangeHref).join(',') + '&m=terms', 'primary']] : []
+    };
+    return { icon: '•', min: 15, steps: [], acts: actionsFor(t, dayText) };
+  }
+  function catchProgress(queue) {
+    let st = S.catchStart;
+    if (!queue.length) return { done: st ? st.keys.length : 0, total: st ? st.keys.length : 0 };
+    if (!st || !st.keys) st = S.catchStart = { at: Date.now(), keys: [] };
+    let added = false;
+    queue.forEach(it => { if (!st.keys.includes(it.key)) { st.keys.push(it.key); added = true; } });
+    if (added) persist();
+    return { done: st.keys.filter(k => S.done[k]).length, total: st.keys.length };
+  }
+  function catchCard(today) {
+    const queue = catchQueue(today);
+    if (!queue.length) return '';
+    const it = queue[0];
+    const min = queue.reduce((a, x) => a + lightFor(x).min, 0);
+    return '<a class="card review-card catch-card" href="#/nadrabiam"><div class="flame">🐢</div><div><div class="kicker">Najpierw nadrabiam po kolei</div>' +
+      '<b>' + DOW[it.src.dow] + ' ' + fmtDate(it.src.date) + ' · ' + esc(it.b.label) + '</b> <span class="muted">– ' + esc(it.b.text.split(/[,(]/)[0].trim()) + '</span>' +
+      '<div class="small muted">' + queue.length + ' ' + plural(queue.length, 'zaległy blok', 'zaległe bloki', 'zaległych bloków') + ' · ok. ' + min + ' min w lżejszej wersji · Dzisiejsze bloki poczekają.</div></div><span class="chev">›</span></a>';
+  }
+  function viewCatchUp() {
+    const today = todayISO();
+    const queue = catchQueue(today);
+    const prog = catchProgress(queue);
+    if (!queue.length) {
+      delete S.catchStart;
+      S.catchLater = [];
+      persist();
+      setView('<div class="card" style="text-align:center;padding:34px 18px"><div style="font-size:3rem">🎉</div><h1>Zaległości nadrobione!</h1>' +
+        (prog.total ? '<p class="muted">Nadrobione bloki: ' + prog.done + '.</p>' : '<p class="muted">Nie masz zaległych bloków.</p>') +
+        '<a class="btn primary" href="#/dzis">Wróć do „Dziś”</a></div>');
+      return;
+    }
+    const it = queue[0];
+    const L = lightFor(it);
+    const min = queue.reduce((a, x) => a + lightFor(x).min, 0);
+    const later = S.catchLater || [];
+    let html = '<a class="btn sm ghost" href="#/dzis">‹ Dziś</a><h1 style="margin-top:12px">🐢 Nadrabiam po kolei</h1>' +
+      '<p class="muted">Od najstarszego, jeden blok naraz, w lżejszej wersji. Dzisiejsze bloki poczekają – najpierw podstawy.</p>' +
+      '<div class="row between small"><b>Zostało ' + queue.length + ' · ok. ' + min + ' min</b><span class="muted">nadrobione: ' + prog.done + ' / ' + prog.total + '</span></div>' +
+      '<div class="progress ok" style="margin:8px 0 16px"><i style="width:' + (prog.total ? 100 * prog.done / prog.total : 0) + '%"></i></div>' +
+      '<div class="card catch-now"><div class="kicker">' + DOW[it.src.dow] + ' ' + fmtDate(it.src.date) + (it.src.nr ? ' · dzień ' + it.src.nr : '') + ' · ' + esc(it.b.label) +
+      (later.includes(it.key) ? ' · odłożony' : '') + '</div>' +
+      '<h2 style="margin:4px 0 10px">' + L.icon + ' Teraz zrób tylko to:</h2>' +
+      (L.steps.length ? '<ol class="catch-steps">' + L.steps.map(x => '<li>' + linkRefs(esc(x)) + '</li>').join('') + '</ol>'
+        : '<p>' + linkRefs(esc(it.b.text)) + '</p>') +
+      '<p class="small muted">ok. ' + L.min + ' min' + (L.skip ? ' · można pominąć' : '') + '</p>' +
+      '<div class="acts row">' + L.acts.map(a => '<a class="btn sm ' + a[2] + '" href="' + a[1] + '">' + esc(a[0]) + '</a>').join('') +
+      '<button class="btn sm ghost" id="ctimer">⏱ Minutnik ' + L.min + ' min</button></div>' +
+      '<details class="catch-full"><summary class="small">Pełna wersja z planu</summary><p class="small">' + linkRefs(esc(it.b.text)) + '</p></details>' +
+      '<div class="catch-btns"><button class="btn ok" id="cdone">✓ Zrobione – następny</button>' +
+      (L.skip ? '<button class="btn" id="cskip">Pomiń – to tylko powtórka</button>' : '') +
+      (queue.length > 1 ? '<button class="btn ghost" id="clater">Odłóż na koniec</button>' : '') + '</div></div>';
+    const next = queue.slice(1, 6);
+    if (next.length) html += '<div class="kicker" style="margin-top:18px">Dalej w kolejce</div><ul class="catch-next">' +
+      next.map(x => '<li>' + DOW[x.src.dow] + ' ' + fmtDate(x.src.date) + ' · ' + esc(x.b.label) + ' – ' + esc(x.b.text.split(/[,(]/)[0].trim()) +
+        ' <span class="muted">(' + lightFor(x).min + ' min)</span></li>').join('') +
+      (queue.length > 6 ? '<li class="muted">… i jeszcze ' + (queue.length - 6) + '</li>' : '') + '</ul>';
+    setView(html, { keepScroll: viewCatchUp.keep });
+    viewCatchUp.keep = false;
+    const finish = msg => {
+      S.done[it.key] = Date.now();
+      S.catchLater = (S.catchLater || []).filter(k => k !== it.key);
+      save();
+      if (msg) toast(msg);
+      window.scrollTo(0, 0);
+      viewCatchUp();
+    };
+    $('#cdone').addEventListener('click', () => finish());
+    const sk = $('#cskip');
+    if (sk) sk.addEventListener('click', () => finish('Pominięte – te pytania wrócą w powtórkach.'));
+    const lt = $('#clater');
+    if (lt) lt.addEventListener('click', () => {
+      S.catchLater = (S.catchLater || []).filter(k => k !== it.key).concat(it.key);
+      persist();
+      viewCatchUp();
+    });
+    $('#ctimer').addEventListener('click', () => startTimer('Nadrabiam: ' + it.b.label + ' – ' + fmtDate(it.src.date), 'focus', L.min));
   }
 
   // ---------- „Na dziś do powtórki” ----------
@@ -483,7 +628,7 @@
     } else if (entry) {
       headline = '<div class="kicker">' + DOW[entry.dow] + ' ' + fmtDate(entry.date) + (entry.nr ? ' · dzień ' + entry.nr + ' z 45' : '') + ' · ' + esc(STAGES[entry.stage]) + '</div><h1>Dziś</h1>';
     }
-    let body = '';
+    let body = catchCard(today);
     const items = entry ? dayItems(entry) : [];
     if (entry && items.length) {
       const nd = itemsDone(items);
@@ -776,7 +921,7 @@
       return { mode: mode === 'quiz' ? 'quiz' : 'terms', items: cards.map(c => ({ kind: 'c', id: c.id, c })), total: cards.length };
     }
     let qset = null;
-    if (params.get('q')) qset = new Set(parseRange(params.get('q')));
+    if (params.get('q')) qset = new Set(params.get('q').split(',').flatMap(parseRange));
     if (params.get('s')) { const secs = params.get('s').split(','); qset = new Set(QUESTIONS.filter(q => secs.includes(q.sec.id)).map(q => q.n)); }
     if (params.get('weak')) qset = new Set(S.weak);
     if (mode === 'questions') {
@@ -1074,10 +1219,10 @@
       });
     } catch (e) { /* bez dźwięku */ }
   }
-  function startTimer(label, mode) {
+  function startTimer(label, mode, minutes) {
     try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) { audioCtx = null; }
     mode = mode || 'focus';
-    S.timer = { label, mode, end: Date.now() + (mode === 'focus' ? 25 : 5) * 60000 };
+    S.timer = { label, mode, end: Date.now() + (minutes || (mode === 'focus' ? 25 : 5)) * 60000 };
     save();
     drawTimer();
   }
@@ -1119,7 +1264,7 @@
     const [path, qs] = hash.slice(1).split('?');
     const params = new URLSearchParams(qs || '');
     const parts = path.split('/').filter(Boolean);
-    const tab = { powtorka: 'dzis', dzis: 'dzis', plan: 'plan', notatki: 'notatki', n: 'notatki', tabele: 'notatki', fiszki: 'fiszki', egzamin: 'egzamin', cwicz: 'egzamin', gry: 'gry' }[parts[0]] || 'dzis';
+    const tab = { nadrabiam: 'dzis', powtorka: 'dzis', dzis: 'dzis', plan: 'plan', notatki: 'notatki', n: 'notatki', tabele: 'notatki', fiszki: 'fiszki', egzamin: 'egzamin', cwicz: 'egzamin', gry: 'gry' }[parts[0]] || 'dzis';
     $$('.tabbar a').forEach(a => a.classList.toggle('active', a.dataset.tab === tab));
     if (parts[0] !== 'fiszki' || parts[1] !== 'sesja') session = null;
     switch (parts[0]) {
@@ -1136,6 +1281,7 @@
         break;
       case 'cwicz': newPractice(+parts[1]); break;
       case 'powtorka': viewReviewToday(); break;
+      case 'nadrabiam': viewCatchUp(); break;
       case 'gry': window.GAMES ? window.GAMES.view(parts.slice(1), params) : viewToday(); break;
       default: viewToday();
     }

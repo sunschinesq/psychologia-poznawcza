@@ -440,3 +440,15 @@ details.sketch > div { margin-top: 8px; }
 .rev-q:first-of-type { border-top: 0; }
 .rev-q a { color: var(--text); text-decoration: none; }
 .moved-tag { display: inline-block; font-size: .75rem; font-weight: 700; color: var(--mid); background: var(--mid-soft); border-radius: 6px; padding: 1px 6px; margin-right: 6px; }
+
+/* ---------- nadrabiam po kolei ---------- */
+.catch-card { border-width: 2px; }
+.catch-now { border: 2px solid var(--accent); }
+.catch-steps { margin: 0 0 8px; padding-left: 22px; font-size: 1.05rem; }
+.catch-steps li { margin-bottom: 6px; }
+.catch-full { margin: 12px 0 4px; }
+.catch-full > summary { cursor: pointer; color: var(--muted); }
+.catch-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.catch-btns .btn { min-height: 52px; }
+.catch-next { margin: 4px 0 0; padding-left: 18px; font-size: .88rem; color: var(--muted); }
+.catch-next li { margin-bottom: 4px; }
